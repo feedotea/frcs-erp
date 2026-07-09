@@ -1,0 +1,1926 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>FRCS INVENTORY</title>
+<style>
+  :root{
+    --ink:#1a1a1a;
+    --paper:#f4f1e9;
+    --paper-2:#ebe6d9;
+    --line:#c9c2b0;
+    --prussian:#20344a;
+    --gilt:#9a7b3f;
+    --red:#8f3a2f;
+    --green:#4a5d3a;
+    --amber:#a67a25;
+    --muted:#8a8474;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    font-family:"Helvetica Neue",-apple-system,"PingFang TC","Noto Sans TC",sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    font-size:15px;
+    line-height:1.5;
+    overflow:hidden;
+  }
+  .mono{font-family:"Courier New","Courier Prime",monospace;}
+  .app{
+    display:flex;flex-direction:column;
+    height:100vh;height:100dvh;
+    max-width:520px;margin:0 auto;
+    background:var(--paper);
+    position:relative;
+  }
+
+  /* ---- top masthead ---- */
+  .masthead{
+    padding:calc(env(safe-area-inset-top) + 10px) 16px 8px;
+    border-bottom:2px solid var(--ink);
+    background:var(--paper);
+    flex-shrink:0;
+  }
+  .masthead .top{
+    display:flex;justify-content:space-between;align-items:baseline;
+  }
+  .brand{
+    font-family:"Courier New",monospace;
+    font-weight:700;letter-spacing:2px;font-size:15px;
+  }
+  .brand small{font-weight:400;letter-spacing:1px;color:var(--muted);font-size:10px;display:block;margin-top:1px;}
+  .dateline{font-family:"Courier New",monospace;font-size:10px;color:var(--muted);text-align:right;}
+
+  /* ---- mode toggle ---- */
+  .modebar{display:flex;margin-top:8px;border:1px solid var(--ink);}
+  .modebar button{
+    flex:1;background:transparent;border:none;font-family:"Courier New",monospace;
+    font-size:12px;letter-spacing:2px;padding:7px 0;color:var(--ink);font-weight:700;
+    cursor:pointer;
+  }
+  .modebar button.on{background:var(--ink);color:var(--paper);}
+  .modebar button.lockbtn{flex:0 0 40px;font-size:13px;padding:6px 0;border-left:1px solid var(--ink);}
+
+  /* ---- scroll body ---- */
+  .body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 16px 90px;}
+  .view{display:none;}
+  .view.on{display:block;}
+
+  h2.sec{font-family:"Courier New",monospace;font-size:11px;letter-spacing:2px;color:var(--muted);
+    text-transform:uppercase;margin:2px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--line);}
+  .row-between{display:flex;justify-content:space-between;align-items:center;}
+
+  /* ---- cards ---- */
+  .card{background:var(--paper-2);border:1px solid var(--line);padding:12px;margin-bottom:10px;}
+  .card.pending{border-left:3px solid var(--amber);}
+  .card.done{border-left:3px solid var(--green);}
+
+  .style-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+  .style-no{font-family:"Courier New",monospace;font-size:10px;color:var(--gilt);letter-spacing:1px;}
+  .style-name{font-weight:700;font-size:15px;margin-top:1px;}
+  .style-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+  .tag{font-family:"Courier New",monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border:1px solid var(--line);white-space:nowrap;}
+  .tag.pre{color:var(--amber);border-color:var(--amber);}
+  .tag.stock{color:var(--green);border-color:var(--green);}
+  .tag.cat{color:var(--prussian);border-color:var(--prussian);}
+  .tag.gender{color:var(--gilt);border-color:var(--gilt);}
+  .tags-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
+
+  .filterbar{display:flex;gap:6px;overflow-x:auto;margin-top:8px;-webkit-overflow-scrolling:touch;}
+  .filterbar .fchip{font-family:"Courier New",monospace;font-size:11px;letter-spacing:1px;
+    padding:5px 11px;border:1px solid var(--line);background:var(--paper);color:var(--muted);
+    white-space:nowrap;cursor:pointer;}
+  .filterbar .fchip.on{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+
+  /* ---- SKU matrix ---- */
+  .matrix{margin-top:10px;overflow-x:auto;}
+  table.mtx{border-collapse:collapse;width:100%;font-family:"Courier New",monospace;font-size:12px;}
+  table.mtx th,table.mtx td{border:1px solid var(--line);padding:5px 4px;text-align:center;min-width:34px;}
+  table.mtx th{background:var(--paper);color:var(--muted);font-size:10px;font-weight:400;letter-spacing:1px;}
+  table.mtx td.rowh{background:var(--paper);color:var(--ink);font-weight:700;text-align:left;padding-left:8px;white-space:nowrap;}
+  td.q0{color:var(--red);}
+  td.qlow{color:var(--amber);background:#f7f0dd;}
+  td.qok{color:var(--ink);}
+
+  /* ---- big keypad style buttons ---- */
+  .btn{display:block;width:100%;background:var(--ink);color:var(--paper);border:none;
+    font-family:"Courier New",monospace;letter-spacing:2px;font-size:14px;font-weight:700;
+    padding:14px;cursor:pointer;margin-top:6px;}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--ink);}
+  .btn.sm{padding:9px;font-size:12px;letter-spacing:1px;}
+  .btn.gilt{background:var(--gilt);}
+  .btn.red{background:var(--red);}
+  .btn.green{background:var(--green);}
+  .btn-row{display:flex;gap:8px;}
+  .btn-row .btn{margin-top:6px;}
+
+  /* ---- form fields ---- */
+  label.fld{display:block;font-family:"Courier New",monospace;font-size:10px;letter-spacing:1px;
+    color:var(--muted);text-transform:uppercase;margin:12px 0 4px;}
+  input.f,select.f,textarea.f{width:100%;background:var(--paper);border:1px solid var(--line);
+    padding:10px;font-family:"Courier New",monospace;font-size:14px;color:var(--ink);}
+  input.f:focus,select.f:focus,textarea.f:focus{outline:none;border-color:var(--ink);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
+
+  /* chip selector */
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .chip{font-family:"Courier New",monospace;font-size:12px;padding:6px 10px;border:1px solid var(--line);
+    background:var(--paper);cursor:pointer;}
+  .chip.on{background:var(--ink);color:var(--paper);border-color:var(--ink);}
+
+  /* ---- report figures ---- */
+  .kpi{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+  .kpi .cell{border:1px solid var(--line);padding:10px;background:var(--paper-2);}
+  .kpi .cell .lab{font-family:"Courier New",monospace;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;}
+  .kpi .cell .val{font-family:"Courier New",monospace;font-size:20px;font-weight:700;margin-top:2px;}
+  .kpi .cell .val.pos{color:var(--green);}
+  .kpi .cell .val.neg{color:var(--red);}
+
+  .barline{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px;}
+  .barline .nm{width:74px;font-family:"Courier New",monospace;color:var(--muted);font-size:11px;}
+  .barline .track{flex:1;background:var(--paper-2);height:14px;border:1px solid var(--line);}
+  .barline .fill{height:100%;background:var(--prussian);}
+  .barline .amt{width:64px;text-align:right;font-family:"Courier New",monospace;font-size:11px;}
+
+  .ledger{font-family:"Courier New",monospace;font-size:12px;}
+  .ledger .lr{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dotted var(--line);}
+  .ledger .lr .l{color:var(--muted);}
+
+  /* ---- bottom tabbar ---- */
+  .tabbar{
+    position:fixed;bottom:0;left:0;right:0;max-width:520px;margin:0 auto;
+    display:flex;background:var(--ink);
+    padding-bottom:env(safe-area-inset-bottom);
+    z-index:50;
+  }
+  .tabbar button{
+    flex:1;background:transparent;border:none;color:var(--paper);
+    font-family:"Courier New",monospace;font-size:10px;letter-spacing:1px;
+    padding:10px 2px 12px;cursor:pointer;opacity:.55;
+  }
+  .tabbar button .ic{display:block;font-size:17px;margin-bottom:3px;opacity:.9;line-height:1;}
+  .tabbar button.on{opacity:1;border-top:2px solid var(--gilt);}
+
+  /* ---- modal ---- */
+  .modal{position:fixed;inset:0;background:rgba(20,20,20,.55);display:none;z-index:100;
+    align-items:flex-end;justify-content:center;}
+  .modal.on{display:flex;}
+  .sheet{background:var(--paper);width:100%;max-width:520px;border-top:2px solid var(--ink);
+    padding:16px 16px calc(env(safe-area-inset-bottom) + 20px);max-height:88vh;overflow-y:auto;}
+  .sheet h3{font-family:"Courier New",monospace;font-size:13px;letter-spacing:1px;margin-bottom:2px;}
+  .sheet .sub{font-size:11px;color:var(--muted);margin-bottom:10px;}
+  .xclose{float:right;font-family:"Courier New",monospace;font-size:18px;background:none;border:none;cursor:pointer;color:var(--ink);}
+
+  .empty{text-align:center;color:var(--muted);font-family:"Courier New",monospace;font-size:12px;padding:40px 0;line-height:1.8;}
+  .toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);
+    font-family:"Courier New",monospace;font-size:12px;padding:10px 18px;z-index:200;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;}
+  .toast.on{opacity:1;}
+  .hint{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.6;}
+  .costline{font-family:"Courier New",monospace;font-size:10px;color:var(--muted);margin-top:1px;}
+  .cntrow{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--paper-2);
+    padding:8px 10px;margin-bottom:6px;}
+  textarea.f{resize:vertical;font-size:12px;line-height:1.5;}
+  .poitems{margin-top:10px;border-top:1px dotted var(--line);padding-top:8px;}
+  .porow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dotted var(--line);}
+  .porow:last-child{border-bottom:none;}
+
+  .scanbox{display:flex;align-items:center;gap:8px;border:2px solid var(--prussian);background:var(--paper);
+    padding:4px 4px 4px 10px;margin-bottom:6px;}
+  .scanbox .scanic{font-size:16px;color:var(--prussian);}
+  .scanbox .scanin{border:none;flex:1;background:transparent;padding:9px 4px;}
+  .scanbox .scanin:focus{outline:none;}
+
+  /* label sheet */
+  .lblgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
+  .lblcard{border:1px dashed var(--line);padding:8px;background:#fff;text-align:center;}
+  .lblcard .ln{font-family:"Courier New",monospace;font-size:9px;color:var(--ink);letter-spacing:.5px;}
+  .lblcard .lname{font-size:10px;font-weight:700;margin:1px 0;}
+  .lblcard svg{max-width:100%;height:auto;}
+  .lblpick{display:flex;align-items:center;gap:6px;font-family:"Courier New",monospace;font-size:11px;margin-bottom:4px;}
+  @media print{
+    body *{visibility:hidden;}
+    #printArea,#printArea *{visibility:visible;}
+    #printArea{position:absolute;left:0;top:0;width:100%;}
+    .lblcard{border:none;page-break-inside:avoid;}
+    #receiptArea,#receiptArea *{visibility:visible;}
+    #receiptArea{position:absolute;left:0;top:0;width:100%;}
+  }
+
+  /* cart */
+  .cartrow{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--paper-2);
+    padding:9px 10px;margin-bottom:7px;}
+  .cartrow .ci{flex:1;min-width:0;}
+  .cartrow .cn{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cartrow .cv{font-family:"Courier New",monospace;font-size:10px;color:var(--muted);}
+  .cartrow .cp{font-family:"Courier New",monospace;font-size:13px;width:74px;text-align:right;}
+  .qstep{display:flex;align-items:center;gap:4px;}
+  .qstep button{width:26px;height:26px;border:1px solid var(--ink);background:var(--paper);
+    font-family:"Courier New",monospace;font-size:15px;cursor:pointer;line-height:1;}
+  .qstep .qn{width:22px;text-align:center;font-family:"Courier New",monospace;font-size:14px;}
+  .cartrow .del{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:2px 4px;}
+
+  .carttotals{border-top:2px solid var(--ink);margin-top:12px;padding-top:10px;font-family:"Courier New",monospace;}
+  .carttotals .tr{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;}
+  .carttotals .tr.grand{font-size:20px;font-weight:700;border-top:1px dotted var(--line);margin-top:5px;padding-top:8px;}
+  .carttotals .tr .disc{color:var(--red);}
+
+  .mbanner{border:1px solid var(--gilt);background:#faf6ec;padding:9px 11px;margin-top:12px;
+    display:flex;justify-content:space-between;align-items:center;}
+  .mbanner .mn{font-weight:700;font-size:13px;}
+  .mbanner .mmeta{font-family:"Courier New",monospace;font-size:10px;color:var(--muted);}
+  .mbanner .mdisc{font-family:"Courier New",monospace;font-size:12px;color:var(--gilt);font-weight:700;}
+  .mbanner .mx{background:none;border:none;color:var(--muted);font-size:15px;cursor:pointer;}
+
+  .mcard{border:1px solid var(--line);background:var(--paper-2);padding:11px;margin-bottom:8px;}
+  .mcard .row-between{align-items:flex-start;}
+  .tier{font-family:"Courier New",monospace;font-size:9px;letter-spacing:1px;padding:2px 6px;border:1px solid var(--gilt);color:var(--gilt);}
+
+  /* receipt */
+  #receiptArea{display:none;}
+  .receipt{width:280px;margin:0 auto;font-family:"Courier New",monospace;color:#000;background:#fff;padding:14px;font-size:12px;}
+  .receipt .rc{text-align:center;}
+  .receipt h4{font-size:15px;letter-spacing:2px;margin-bottom:2px;}
+  .receipt .rline{border-top:1px dashed #000;margin:8px 0;}
+  .receipt .ri{display:flex;justify-content:space-between;margin:2px 0;}
+  .receipt .rtot{display:flex;justify-content:space-between;font-weight:700;font-size:14px;margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="masthead">
+    <div class="top">
+      <div class="brand"><span id="brandName">FRCS</span><small>INVENTORY & LEDGER</small></div>
+      <div style="text-align:right">
+        <div class="dateline" id="dateline">—</div>
+        <div class="dateline" id="syncDot" onclick="openSettings()" style="cursor:pointer;margin-top:2px">○ 未連線</div>
+      </div>
+    </div>
+    <div class="filterbar" id="storeBar" style="display:none;margin-top:8px"></div>
+    <div class="modebar" id="modebar"></div>
+  </div>
+
+  <div class="body" id="body">
+    <!-- ============ POS / REGISTER VIEWS ============ -->
+
+    <!-- 結帳 -->
+    <div class="view on" id="v-register">
+      <div class="scanbox">
+        <span class="scanic">▤</span>
+        <input class="f scanin" id="regScan" placeholder="掃描商品條碼加入購物車" onkeydown="if(event.key==='Enter')scanToCart()" autocomplete="off">
+      </div>
+      <div class="row-between" style="margin-top:4px">
+        <button class="btn ghost sm" style="width:auto;margin:0" onclick="openPickItem()">＋ 手動選品</button>
+        <button class="btn ghost sm" style="width:auto;margin:0" onclick="openMemberAttach()">♦ 帶入會員</button>
+      </div>
+
+      <div id="memberBanner"></div>
+      <div id="cartList" style="margin-top:12px"></div>
+
+      <div class="carttotals" id="cartTotals"></div>
+
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn ghost" onclick="openDiscount()">折扣</button>
+        <button class="btn gilt" onclick="openPreFromCart()">改開預購</button>
+      </div>
+      <button class="btn green" id="checkoutBtn" onclick="openCheckout()">結帳 CHECKOUT</button>
+      <button class="btn ghost sm" onclick="clearCart(true)">清空購物車</button>
+    </div>
+
+    <!-- 會員 -->
+    <div class="view" id="v-members">
+      <div class="row-between">
+        <h2 class="sec">會員 MEMBERS</h2>
+        <button class="btn ghost sm" style="width:auto;margin:0" onclick="openNewMember()">＋ 新會員</button>
+      </div>
+      <div class="scanbox" style="border-color:var(--line)">
+        <span class="scanic">⌕</span>
+        <input class="f scanin" id="memSearch" placeholder="輸入電話或姓名搜尋" oninput="renderMembers()" autocomplete="off">
+      </div>
+      <div id="memberList" style="margin-top:10px"></div>
+    </div>
+
+    <!-- 交易紀錄 -->
+    <div class="view" id="v-txns">
+      <h2 class="sec">今日交易 TRANSACTIONS</h2>
+      <div id="txnSummary"></div>
+      <div id="txnList" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ============ OPS VIEWS (店員可用) ============ -->
+
+    <!-- 預購追蹤 -->
+    <div class="view" id="v-preorders">
+      <div class="row-between">
+        <h2 class="sec">預購追蹤 PRE-ORDERS</h2>
+        <button class="btn ghost sm" style="width:auto;margin:0" onclick="setMode('pos')">＋ 開新單</button>
+      </div>
+      <div class="filterbar" id="preFilter"></div>
+      <div id="preTrackList" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ============ INVENTORY VIEWS ============ -->
+
+    <!-- 款式 / SKU -->
+    <div class="view" id="v-styles">
+      <div class="row-between">
+        <h2 class="sec">商品 ITEMS</h2>
+        <div id="styleActions"></div>
+      </div>
+      <div class="scanbox" style="border-color:var(--line)">
+        <span class="scanic">⌕</span>
+        <input class="f scanin" id="styleSearch" placeholder="搜尋編號或品名" oninput="renderStyles()" autocomplete="off">
+      </div>
+      <div class="filterbar" id="filterGender" style="margin-top:8px"></div>
+      <div class="filterbar" id="filterCat" style="margin-bottom:12px"></div>
+      <div id="styleList"></div>
+    </div>
+
+    <!-- 進貨 -->
+    <div class="view" id="v-intake">
+      <h2 class="sec">入庫 INTAKE</h2>
+      <div class="hint">貨到、標籤印好後,在此把數量加進庫存。</div>
+      <div class="scanbox" style="margin-top:10px">
+        <span class="scanic">▤</span>
+        <input class="f scanin" id="ikScan" placeholder="掃描條碼帶入商品" onkeydown="if(event.key==='Enter')scanIntake()" autocomplete="off">
+      </div>
+      <label class="fld">商品</label>
+      <select class="f" id="ik_no"></select>
+      <label class="fld">入庫數量</label>
+      <input class="f" id="ik_qty" type="number" value="1" inputmode="numeric">
+      <button class="btn green" onclick="doIntake()">確認入庫</button>
+
+      <h2 class="sec" style="margin-top:24px">今日入庫 TODAY</h2>
+      <div id="intakeRecent"></div>
+    </div>
+
+    <!-- 補貨 / 低量 -->
+    <div class="view" id="v-restock">
+      <h2 class="sec">叫貨清單 RESTOCK</h2>
+      <div class="hint">以下 SKU 已售罄或低於安全量。複製清單傳給 Francis 叫貨。</div>
+      <div id="lowList" style="margin-top:10px"></div>
+      <button class="btn" style="margin-top:10px" onclick="copyRestock()">複製叫貨清單</button>
+    </div>
+
+    <!-- 盤點 -->
+    <div class="view" id="v-count">
+      <h2 class="sec">盤點 STOCKTAKE</h2>
+      <div class="hint">填入實際清點數,存檔後更新帳面庫存。</div>
+      <div id="countList" style="margin-top:10px"></div>
+      <button class="btn" style="margin-top:10px" onclick="saveCount()">存檔並更新庫存</button>
+    </div>
+
+    <!-- 標籤 -->
+    <div class="view" id="v-labels">
+      <h2 class="sec">標籤列印 LABELS</h2>
+      <div class="hint">用商品編號產生 Code128 條碼。勾選要印的,按列印時選你的貼紙機。</div>
+      <div id="lblPickList" style="margin-top:10px"></div>
+      <div class="btn-row">
+        <button class="btn ghost sm" onclick="lblAll(true)">全選</button>
+        <button class="btn ghost sm" onclick="lblAll(false)">全不選</button>
+      </div>
+      <button class="btn green" onclick="printLabels()">預覽並列印</button>
+      <div id="printArea"></div>
+    </div>
+
+    <!-- ============ LEDGER VIEWS ============ -->
+
+    <!-- 記一筆銷售 -->
+    <div class="view" id="v-sale">
+      <h2 class="sec">退換貨 RETURNS</h2>
+      <div class="hint">選原銷售紀錄辦理退貨或換貨。退貨會回補庫存並沖銷營收。</div>
+      <button class="btn red" style="margin-top:10px" onclick="openReturn()">登記退貨 / 換貨</button>
+
+      <h2 class="sec" style="margin-top:24px">今日退換 TODAY</h2>
+      <div id="returnList"></div>
+
+      <h2 class="sec" style="margin-top:24px">手動補記銷售 MANUAL ENTRY</h2>
+      <div class="hint">正常銷售請走收銀 POS。此處僅供漏記時補登。</div>
+      <label class="fld">商品</label>
+      <select class="f" id="saleStyle" onchange="fillSaleSkus()"></select>
+      <div class="grid2">
+        <div><label class="fld">數量</label><input class="f" id="saleQty" type="number" value="1" inputmode="numeric"></div>
+        <div><label class="fld">單價 NT$</label><input class="f" id="salePrice" type="number" inputmode="numeric"></div>
+      </div>
+      <button class="btn ghost" onclick="saveSale()">補記一筆銷售</button>
+    </div>
+
+    <!-- 採購 -->
+    <div class="view" id="v-purchase">
+      <div class="row-between">
+        <h2 class="sec">採購 PURCHASE ORDERS</h2>
+        <button class="btn ghost sm" style="width:auto;margin:0" onclick="openNewPO()">＋ 新採購單</button>
+      </div>
+      <div class="filterbar" id="poFilter"></div>
+      <div id="poList" style="margin-top:10px"></div>
+    </div>
+
+    <!-- 開銷 -->
+    <div class="view" id="v-expense">
+      <h2 class="sec">記開銷 EXPENSE</h2>
+      <label class="fld">類別</label>
+      <select class="f" id="expCat">
+        <option>房租</option><option>水電</option><option>人事薪資</option>
+        <option>進貨貨款</option><option>行銷</option><option>設備</option>
+        <option>運費關稅</option><option>稅金</option><option>雜支</option>
+      </select>
+      <div class="grid2">
+        <div><label class="fld">金額 NT$</label><input class="f" id="expAmt" type="number" inputmode="numeric"></div>
+        <div><label class="fld">付給誰</label><input class="f" id="expWho" placeholder="—"></div>
+      </div>
+      <label class="fld">備註</label>
+      <input class="f" id="expNote" placeholder="—">
+      <button class="btn" onclick="saveExpense()">記開銷</button>
+
+      <h2 class="sec" style="margin-top:22px">待匯款 TO PAY</h2>
+      <div id="topayList"></div>
+
+      <h2 class="sec" style="margin-top:22px">設定 SETTINGS</h2>
+      <button class="btn ghost sm" onclick="openChangePin()">變更老闆模式 PIN</button>
+      <button class="btn ghost sm" onclick="openSettings()">雲端連線設定</button>
+      <button class="btn ghost sm" onclick="cloudLoad()">重新載入雲端資料</button>
+    </div>
+
+    <!-- 報表 -->
+    <div class="view" id="v-report">
+      <h2 class="sec">本月損益 P&L · <span id="repMonth" class="mono"></span></h2>
+      <div class="kpi">
+        <div class="cell"><div class="lab">營收 Revenue</div><div class="val" id="repRev">—</div></div>
+        <div class="cell"><div class="lab">進貨成本 COGS</div><div class="val" id="repCogs">—</div></div>
+        <div class="cell"><div class="lab">開銷 Expenses</div><div class="val" id="repExp">—</div></div>
+        <div class="cell"><div class="lab">毛利 Gross</div><div class="val pos" id="repGross">—</div></div>
+        <div class="cell"><div class="lab">淨利 Net</div><div class="val pos" id="repNet">—</div></div>
+      </div>
+      <div id="rollupBox"></div>
+      <h2 class="sec">營收結構 REVENUE MIX</h2>
+      <div id="mixBars"></div>
+      <h2 class="sec" style="margin-top:16px">開銷分類 BY CATEGORY</h2>
+      <div id="expBars"></div>
+      <h2 class="sec" style="margin-top:16px">明細 LEDGER</h2>
+      <div class="ledger" id="ledger"></div>
+      <button class="btn ghost sm" style="margin-top:12px" onclick="toast('CSV 匯出需接後端 Sheets')">匯出 CSV</button>
+    </div>
+
+  </div>
+
+  <!-- bottom tabs -->
+  <div class="tabbar" id="tabs"></div>
+</div>
+
+<!-- modal -->
+<div class="modal" id="modal">
+  <div class="sheet" id="sheet"></div>
+</div>
+<div class="toast" id="toast"></div>
+<div id="receiptArea"></div>
+
+<script>
+/* ===== JsBarcode (embedded) ===== */
+/*! JsBarcode v3.12.3 | (c) Johan Lindell | MIT license */
+!function(t){var e={};function n(r){if(e[r])return e[r].exports;var o=e[r]={i:r,l:!1,exports:{}};return t[r].call(o.exports,o,o.exports,n),o.l=!0,o.exports}n.m=t,n.c=e,n.d=function(t,e,r){n.o(t,e)||Object.defineProperty(t,e,{enumerable:!0,get:r})},n.r=function(t){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(t,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(t,"__esModule",{value:!0})},n.t=function(t,e){if(1&e&&(t=n(t)),8&e)return t;if(4&e&&"object"==typeof t&&t&&t.__esModule)return t;var r=Object.create(null);if(n.r(r),Object.defineProperty(r,"default",{enumerable:!0,value:t}),2&e&&"string"!=typeof t)for(var o in t)n.d(r,o,function(e){return t[e]}.bind(null,o));return r},n.n=function(t){var e=t&&t.__esModule?function(){return t.default}:function(){return t};return n.d(e,"a",e),e},n.o=function(t,e){return Object.prototype.hasOwnProperty.call(t,e)},n.p="",n(n.s=16)}([function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});e.default=function t(e,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,t),this.data=e,this.text=n.text||e,this.options=n}},function(t,e,n){"use strict";var r;function o(t,e,n){return e in t?Object.defineProperty(t,e,{value:n,enumerable:!0,configurable:!0,writable:!0}):t[e]=n,t}Object.defineProperty(e,"__esModule",{value:!0});var i=e.SET_A=0,a=e.SET_B=1,u=e.SET_C=2,f=(e.SHIFT=98,e.START_A=103),c=e.START_B=104,s=e.START_C=105;e.MODULO=103,e.STOP=106,e.FNC1=207,e.SET_BY_CODE=(o(r={},f,i),o(r,c,a),o(r,s,u),r),e.SWAP={101:i,100:a,99:u},e.A_START_CHAR=String.fromCharCode(208),e.B_START_CHAR=String.fromCharCode(209),e.C_START_CHAR=String.fromCharCode(210),e.A_CHARS="[\0-_È-Ï]",e.B_CHARS="[ -È-Ï]",e.C_CHARS="(Ï*[0-9]{2}Ï*)",e.BARS=[11011001100,11001101100,11001100110,10010011e3,10010001100,10001001100,10011001e3,10011000100,10001100100,11001001e3,11001000100,11000100100,10110011100,10011011100,10011001110,10111001100,10011101100,10011100110,11001110010,11001011100,11001001110,11011100100,11001110100,11101101110,11101001100,11100101100,11100100110,11101100100,11100110100,11100110010,11011011e3,11011000110,11000110110,10100011e3,10001011e3,10001000110,10110001e3,10001101e3,10001100010,11010001e3,11000101e3,11000100010,10110111e3,10110001110,10001101110,10111011e3,10111000110,10001110110,11101110110,11010001110,11000101110,11011101e3,11011100010,11011101110,11101011e3,11101000110,11100010110,11101101e3,11101100010,11100011010,11101111010,11001000010,11110001010,1010011e4,10100001100,1001011e4,10010000110,10000101100,10000100110,1011001e4,10110000100,1001101e4,10011000010,10000110100,10000110010,11000010010,1100101e4,11110111010,11000010100,10001111010,10100111100,10010111100,10010011110,10111100100,10011110100,10011110010,11110100100,11110010100,11110010010,11011011110,11011110110,11110110110,10101111e3,10100011110,10001011110,10111101e3,10111100010,11110101e3,11110100010,10111011110,10111101110,11101011110,11110101110,11010000100,1101001e4,11010011100,1100011101011]},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});e.SIDE_BIN="101",e.MIDDLE_BIN="01010",e.BINARIES={L:["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"],G:["0100111","0110011","0011011","0100001","0011101","0111001","0000101","0010001","0001001","0010111"],R:["1110010","1100110","1101100","1000010","1011100","1001110","1010000","1000100","1001000","1110100"],O:["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"],E:["0100111","0110011","0011011","0100001","0011101","0111001","0000101","0010001","0001001","0010111"]},e.EAN2_STRUCTURE=["LL","LG","GL","GG"],e.EAN5_STRUCTURE=["GGLLL","GLGLL","GLLGL","GLLLG","LGGLL","LLGGL","LLLGG","LGLGL","LGLLG","LLGLG"],e.EAN13_STRUCTURE=["LLLLLL","LLGLGG","LLGGLG","LLGGGL","LGLLGG","LGGLLG","LGGGLL","LGLGLG","LGLGGL","LGGLGL"]},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=n(2);e.default=function(t,e,n){var o=t.split("").map((function(t,n){return r.BINARIES[e[n]]})).map((function(e,n){return e?e[t[n]]:""}));if(n){var i=t.length-1;o=o.map((function(t,e){return e<i?t+n:t}))}return o.join("")}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(0);var a=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"encode",value:function(){for(var t="110",e=0;e<this.data.length;e++){var n=parseInt(this.data[e]).toString(2);n=u(n,4-n.length);for(var r=0;r<n.length;r++)t+="0"==n[r]?"100":"110"}return{data:t+="1001",text:this.text}}},{key:"valid",value:function(){return-1!==this.data.search(/^[0-9]+$/)}}]),e}(((r=i)&&r.__esModule?r:{default:r}).default);function u(t,e){for(var n=0;n<e;n++)t="0"+t;return t}e.default=a},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(0),a=(r=i)&&r.__esModule?r:{default:r},u=n(1);var f=function(t){function e(t,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e);var r=function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t.substring(1),n));return r.bytes=t.split("").map((function(t){return t.charCodeAt(0)})),r}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return/^[\x00-\x7F\xC8-\xD3]+$/.test(this.data)}},{key:"encode",value:function(){var t=this.bytes,n=t.shift()-105,r=u.SET_BY_CODE[n];if(void 0===r)throw new RangeError("The encoding does not start with a start character.");!0===this.shouldEncodeAsEan128()&&t.unshift(u.FNC1);var o=e.next(t,1,r);return{text:this.text===this.data?this.text.replace(/[^\x20-\x7E]/g,""):this.text,data:e.getBar(n)+o.result+e.getBar((o.checksum+n)%u.MODULO)+e.getBar(u.STOP)}}},{key:"shouldEncodeAsEan128",value:function(){var t=this.options.ean128||!1;return"string"==typeof t&&(t="true"===t.toLowerCase()),t}}],[{key:"getBar",value:function(t){return u.BARS[t]?u.BARS[t].toString():""}},{key:"correctIndex",value:function(t,e){if(e===u.SET_A){var n=t.shift();return n<32?n+64:n-32}return e===u.SET_B?t.shift()-32:10*(t.shift()-48)+t.shift()-48}},{key:"next",value:function(t,n,r){if(!t.length)return{result:"",checksum:0};var o=void 0,i=void 0;if(t[0]>=200){i=t.shift()-105;var a=u.SWAP[i];void 0!==a?o=e.next(t,n+1,a):(r!==u.SET_A&&r!==u.SET_B||i!==u.SHIFT||(t[0]=r===u.SET_A?t[0]>95?t[0]-96:t[0]:t[0]<32?t[0]+96:t[0]),o=e.next(t,n+1,r))}else i=e.correctIndex(t,r),o=e.next(t,n+1,r);var f=i*n;return{result:e.getBar(i)+o.result,checksum:f+o.checksum}}}]),e}(a.default);e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.mod10=function(t){for(var e=0,n=0;n<t.length;n++){var r=parseInt(t[n]);(n+t.length)%2==0?e+=r:e+=2*r%10+Math.floor(2*r/10)}return(10-e%10)%10},e.mod11=function(t){for(var e=0,n=[2,3,4,5,6,7],r=0;r<t.length;r++){var o=parseInt(t[t.length-1-r]);e+=n[r%n.length]*o}return(11-e%11)%11}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=Object.assign||function(t){for(var e=1;e<arguments.length;e++){var n=arguments[e];for(var r in n)Object.prototype.hasOwnProperty.call(n,r)&&(t[r]=n[r])}return t};e.default=function(t,e){return r({},t,e)}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),o=n(2),i=a(n(3));function a(t){return t&&t.__esModule?t:{default:t}}var u=function(t){function e(t,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e);var r=function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n));return r.fontSize=!n.flat&&n.fontSize>10*n.width?10*n.width:n.fontSize,r.guardHeight=n.height+r.fontSize/2+n.textMargin,r}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),r(e,[{key:"encode",value:function(){return this.options.flat?this.encodeFlat():this.encodeGuarded()}},{key:"leftText",value:function(t,e){return this.text.substr(t,e)}},{key:"leftEncode",value:function(t,e){return(0,i.default)(t,e)}},{key:"rightText",value:function(t,e){return this.text.substr(t,e)}},{key:"rightEncode",value:function(t,e){return(0,i.default)(t,e)}},{key:"encodeGuarded",value:function(){var t={fontSize:this.fontSize},e={height:this.guardHeight};return[{data:o.SIDE_BIN,options:e},{data:this.leftEncode(),text:this.leftText(),options:t},{data:o.MIDDLE_BIN,options:e},{data:this.rightEncode(),text:this.rightText(),options:t},{data:o.SIDE_BIN,options:e}]}},{key:"encodeFlat",value:function(){return{data:[o.SIDE_BIN,this.leftEncode(),o.MIDDLE_BIN,this.rightEncode(),o.SIDE_BIN].join(""),text:this.text}}}]),e}(a(n(0)).default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}();e.checksum=u;var o=i(n(3));function i(t){return t&&t.__esModule?t:{default:t}}var a=function(t){function e(t,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),-1!==t.search(/^[0-9]{11}$/)&&(t+=u(t));var r=function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n));return r.displayValue=n.displayValue,n.fontSize>10*n.width?r.fontSize=10*n.width:r.fontSize=n.fontSize,r.guardHeight=n.height+r.fontSize/2+n.textMargin,r}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),r(e,[{key:"valid",value:function(){return-1!==this.data.search(/^[0-9]{12}$/)&&this.data[11]==u(this.data)}},{key:"encode",value:function(){return this.options.flat?this.flatEncoding():this.guardedEncoding()}},{key:"flatEncoding",value:function(){var t="";return t+="101",t+=(0,o.default)(this.data.substr(0,6),"LLLLLL"),t+="01010",t+=(0,o.default)(this.data.substr(6,6),"RRRRRR"),{data:t+="101",text:this.text}}},{key:"guardedEncoding",value:function(){var t=[];return this.displayValue&&t.push({data:"00000000",text:this.text.substr(0,1),options:{textAlign:"left",fontSize:this.fontSize}}),t.push({data:"101"+(0,o.default)(this.data[0],"L"),options:{height:this.guardHeight}}),t.push({data:(0,o.default)(this.data.substr(1,5),"LLLLL"),text:this.text.substr(1,5),options:{fontSize:this.fontSize}}),t.push({data:"01010",options:{height:this.guardHeight}}),t.push({data:(0,o.default)(this.data.substr(6,5),"RRRRR"),text:this.text.substr(6,5),options:{fontSize:this.fontSize}}),t.push({data:(0,o.default)(this.data[11],"R")+"101",options:{height:this.guardHeight}}),this.displayValue&&t.push({data:"00000000",text:this.text.substr(11,1),options:{textAlign:"right",fontSize:this.fontSize}}),t}}]),e}(i(n(0)).default);function u(t){var e,n=0;for(e=1;e<11;e+=2)n+=parseInt(t[e]);for(e=0;e<11;e+=2)n+=3*parseInt(t[e]);return(10-n%10)%10}e.default=a},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(32),a=n(0);function u(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}function f(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}var c=function(t){function e(){return u(this,e),f(this,(e.__proto__||Object.getPrototypeOf(e)).apply(this,arguments))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return-1!==this.data.search(/^([0-9]{2})+$/)}},{key:"encode",value:function(){var t=this,e=this.data.match(/.{2}/g).map((function(e){return t.encodePair(e)})).join("");return{data:i.START_BIN+e+i.END_BIN,text:this.text}}},{key:"encodePair",value:function(t){var e=i.BINARIES[t[1]];return i.BINARIES[t[0]].split("").map((function(t,n){return("1"===t?"111":"1")+("1"===e[n]?"000":"0")})).join("")}}]),e}(((r=a)&&r.__esModule?r:{default:r}).default);e.default=c},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(42),a=n(0);var u=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return/^[0-9A-Z\-. $/+%]+$/.test(this.data)}},{key:"encode",value:function(){var t=this.data.split("").flatMap((function(t){return i.MULTI_SYMBOLS[t]||t})),n=t.map((function(t){return e.getEncoding(t)})).join(""),r=e.checksum(t,20),o=e.checksum(t.concat(r),15);return{text:this.text,data:e.getEncoding("ÿ")+n+e.getEncoding(r)+e.getEncoding(o)+e.getEncoding("ÿ")+"1"}}}],[{key:"getEncoding",value:function(t){return i.BINARIES[e.symbolValue(t)]}},{key:"getSymbol",value:function(t){return i.SYMBOLS[t]}},{key:"symbolValue",value:function(t){return i.SYMBOLS.indexOf(t)}},{key:"checksum",value:function(t,n){var r=t.slice().reverse().reduce((function(t,r,o){var i=o%n+1;return t+e.symbolValue(r)*i}),0);return e.getSymbol(r%47)}}]),e}(((r=a)&&r.__esModule?r:{default:r}).default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.default=function(t){var e=["width","height","textMargin","fontSize","margin","marginTop","marginBottom","marginLeft","marginRight"];for(var n in e)e.hasOwnProperty(n)&&(n=e[n],"string"==typeof t[n]&&(t[n]=parseInt(t[n],10)));"string"==typeof t.displayValue&&(t.displayValue="false"!=t.displayValue);return t}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r={width:2,height:100,format:"auto",displayValue:!0,fontOptions:"",font:"monospace",text:void 0,textAlign:"center",textPosition:"bottom",textMargin:2,fontSize:20,background:"#ffffff",lineColor:"#000000",margin:10,marginTop:void 0,marginBottom:void 0,marginLeft:void 0,marginRight:void 0,valid:function(){}};e.default=r},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.getTotalWidthOfEncodings=e.calculateEncodingAttributes=e.getBarcodePadding=e.getEncodingHeight=e.getMaximumHeightOfEncodings=void 0;var r,o=n(7),i=(r=o)&&r.__esModule?r:{default:r};function a(t,e){return e.height+(e.displayValue&&t.text.length>0?e.fontSize+e.textMargin:0)+e.marginTop+e.marginBottom}function u(t,e,n){if(n.displayValue&&e<t){if("center"==n.textAlign)return Math.floor((t-e)/2);if("left"==n.textAlign)return 0;if("right"==n.textAlign)return Math.floor(t-e)}return 0}function f(t,e,n){var r;if(n)r=n;else{if("undefined"==typeof document)return 0;r=document.createElement("canvas").getContext("2d")}r.font=e.fontOptions+" "+e.fontSize+"px "+e.font;var o=r.measureText(t);return o?o.width:0}e.getMaximumHeightOfEncodings=function(t){for(var e=0,n=0;n<t.length;n++)t[n].height>e&&(e=t[n].height);return e},e.getEncodingHeight=a,e.getBarcodePadding=u,e.calculateEncodingAttributes=function(t,e,n){for(var r=0;r<t.length;r++){var o,c=t[r],s=(0,i.default)(e,c.options);o=s.displayValue?f(c.text,s,n):0;var l=c.data.length*s.width;c.width=Math.ceil(Math.max(o,l)),c.height=a(c,s),c.barcodePadding=u(o,l,s)}},e.getTotalWidthOfEncodings=function(t){for(var e=0,n=0;n<t.length;n++)e+=t[n].width;return e}},function(t,e,n){"use strict";function r(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}function o(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}function i(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}Object.defineProperty(e,"__esModule",{value:!0});var a=function(t){function e(t,n){r(this,e);var i=o(this,(e.__proto__||Object.getPrototypeOf(e)).call(this));return i.name="InvalidInputException",i.symbology=t,i.input=n,i.message='"'+i.input+'" is not a valid input for '+i.symbology,i}return i(e,Error),e}(),u=function(t){function e(){r(this,e);var t=o(this,(e.__proto__||Object.getPrototypeOf(e)).call(this));return t.name="InvalidElementException",t.message="Not supported type to render on",t}return i(e,Error),e}(),f=function(t){function e(){r(this,e);var t=o(this,(e.__proto__||Object.getPrototypeOf(e)).call(this));return t.name="NoElementException",t.message="No element to render on.",t}return i(e,Error),e}();e.InvalidInputException=a,e.InvalidElementException=u,e.NoElementException=f},function(t,e,n){"use strict";var r=p(n(17)),o=p(n(7)),i=p(n(45)),a=p(n(46)),u=p(n(47)),f=p(n(12)),c=p(n(53)),s=n(15),l=p(n(13));function p(t){return t&&t.__esModule?t:{default:t}}var d=function(){},h=function(t,e,n){var r=new d;if(void 0===t)throw Error("No element to render on was provided.");return r._renderProperties=(0,u.default)(t),r._encodings=[],r._options=l.default,r._errorHandler=new c.default(r),void 0!==e&&((n=n||{}).format||(n.format=_()),r.options(n)[n.format](e,n).render()),r};for(var y in h.getModule=function(t){return r.default[t]},r.default)r.default.hasOwnProperty(y)&&b(r.default,y);function b(t,e){d.prototype[e]=d.prototype[e.toUpperCase()]=d.prototype[e.toLowerCase()]=function(n,r){var i=this;return i._errorHandler.wrapBarcodeCall((function(){r.text=void 0===r.text?void 0:""+r.text;var a=(0,o.default)(i._options,r);a=(0,f.default)(a);var u=t[e],c=v(n,u,a);return i._encodings.push(c),i}))}}function v(t,e,n){var r=new e(t=""+t,n);if(!r.valid())throw new s.InvalidInputException(r.constructor.name,t);var a=r.encode();a=(0,i.default)(a);for(var u=0;u<a.length;u++)a[u].options=(0,o.default)(n,a[u].options);return a}function _(){return r.default.CODE128?"CODE128":Object.keys(r.default)[0]}function g(t,e,n){e=(0,i.default)(e);for(var r=0;r<e.length;r++)e[r].options=(0,o.default)(n,e[r].options),(0,a.default)(e[r].options);(0,a.default)(n),new(0,t.renderer)(t.element,e,n).render(),t.afterRender&&t.afterRender()}d.prototype.options=function(t){return this._options=(0,o.default)(this._options,t),this},d.prototype.blank=function(t){var e=new Array(t+1).join("0");return this._encodings.push({data:e}),this},d.prototype.init=function(){var t;if(this._renderProperties)for(var e in Array.isArray(this._renderProperties)||(this._renderProperties=[this._renderProperties]),this._renderProperties){t=this._renderProperties[e];var n=(0,o.default)(this._options,t.options);"auto"==n.format&&(n.format=_()),this._errorHandler.wrapBarcodeCall((function(){var e=v(n.value,r.default[n.format.toUpperCase()],n);g(t,e,n)}))}},d.prototype.render=function(){if(!this._renderProperties)throw new s.NoElementException;if(Array.isArray(this._renderProperties))for(var t=0;t<this._renderProperties.length;t++)g(this._renderProperties[t],this._encodings,this._options);else g(this._renderProperties,this._encodings,this._options);return this},d.prototype._defaults=l.default,"undefined"!=typeof window&&(window.JsBarcode=h),"undefined"!=typeof jQuery&&(jQuery.fn.JsBarcode=function(t,e){var n=[];return jQuery(this).each((function(){n.push(this)})),h(n,t,e)}),t.exports=h},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=n(18),o=n(19),i=n(25),a=n(31),u=n(34),f=n(39),c=n(40),s=n(41),l=n(44);e.default={CODE39:r.CODE39,CODE128:o.CODE128,CODE128A:o.CODE128A,CODE128B:o.CODE128B,CODE128C:o.CODE128C,EAN13:i.EAN13,EAN8:i.EAN8,EAN5:i.EAN5,EAN2:i.EAN2,UPC:i.UPC,UPCE:i.UPCE,ITF14:a.ITF14,ITF:a.ITF,MSI:u.MSI,MSI10:u.MSI10,MSI11:u.MSI11,MSI1010:u.MSI1010,MSI1110:u.MSI1110,pharmacode:f.pharmacode,codabar:c.codabar,CODE93:s.CODE93,CODE93FullASCII:s.CODE93FullASCII,GenericBarcode:l.GenericBarcode}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.CODE39=void 0;var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(0);var a=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),t=t.toUpperCase(),n.mod43&&(t+=function(t){return u[t]}(function(t){for(var e=0,n=0;n<t.length;n++)e+=s(t[n]);return e%=43}(t))),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"encode",value:function(){for(var t=c("*"),e=0;e<this.data.length;e++)t+=c(this.data[e])+"0";return{data:t+=c("*"),text:this.text}}},{key:"valid",value:function(){return-1!==this.data.search(/^[0-9A-Z\-\.\ \$\/\+\%]+$/)}}]),e}(((r=i)&&r.__esModule?r:{default:r}).default),u=["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","-","."," ","$","/","+","%","*"],f=[20957,29783,23639,30485,20951,29813,23669,20855,29789,23645,29975,23831,30533,22295,30149,24005,21623,29981,23837,22301,30023,23879,30545,22343,30161,24017,21959,30065,23921,22385,29015,18263,29141,17879,29045,18293,17783,29021,18269,17477,17489,17681,20753,35770];function c(t){return function(t){return f[t].toString(2)}(s(t))}function s(t){return u.indexOf(t)}e.CODE39=a},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.CODE128C=e.CODE128B=e.CODE128A=e.CODE128=void 0;var r=u(n(20)),o=u(n(22)),i=u(n(23)),a=u(n(24));function u(t){return t&&t.__esModule?t:{default:t}}e.CODE128=r.default,e.CODE128A=o.default,e.CODE128B=i.default,e.CODE128C=a.default},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=i(n(5)),o=i(n(21));function i(t){return t&&t.__esModule?t:{default:t}}function a(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}var u=function(t){function e(t,n){if(function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),/^[\x00-\x7F\xC8-\xD3]+$/.test(t))var r=a(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,(0,o.default)(t),n));else r=a(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n));return a(r)}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),e}(r.default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=n(1),o=function(t){return t.match(new RegExp("^"+r.A_CHARS+"*"))[0].length},i=function(t){return t.match(new RegExp("^"+r.B_CHARS+"*"))[0].length},a=function(t){return t.match(new RegExp("^"+r.C_CHARS+"*"))[0]};function u(t,e){var n=e?r.A_CHARS:r.B_CHARS,o=t.match(new RegExp("^("+n+"+?)(([0-9]{2}){2,})([^0-9]|$)"));if(o)return o[1]+String.fromCharCode(204)+f(t.substring(o[1].length));var i=t.match(new RegExp("^"+n+"+"))[0];return i.length===t.length?t:i+String.fromCharCode(e?205:206)+u(t.substring(i.length),!e)}function f(t){var e=a(t),n=e.length;if(n===t.length)return t;t=t.substring(n);var r=o(t)>=i(t);return e+String.fromCharCode(r?206:205)+u(t,r)}e.default=function(t){var e=void 0;if(a(t).length>=2)e=r.C_START_CHAR+f(t);else{var n=o(t)>i(t);e=(n?r.A_START_CHAR:r.B_START_CHAR)+u(t,n)}return e.replace(/[\xCD\xCE]([^])[\xCD\xCE]/,(function(t,e){return String.fromCharCode(203)+e}))}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(5),a=(r=i)&&r.__esModule?r:{default:r},u=n(1);var f=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,u.A_START_CHAR+t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return new RegExp("^"+u.A_CHARS+"+$").test(this.data)}}]),e}(a.default);e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(5),a=(r=i)&&r.__esModule?r:{default:r},u=n(1);var f=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,u.B_START_CHAR+t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return new RegExp("^"+u.B_CHARS+"+$").test(this.data)}}]),e}(a.default);e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(5),a=(r=i)&&r.__esModule?r:{default:r},u=n(1);var f=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,u.C_START_CHAR+t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return new RegExp("^"+u.C_CHARS+"+$").test(this.data)}}]),e}(a.default);e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.UPCE=e.UPC=e.EAN2=e.EAN5=e.EAN8=e.EAN13=void 0;var r=c(n(26)),o=c(n(27)),i=c(n(28)),a=c(n(29)),u=c(n(9)),f=c(n(30));function c(t){return t&&t.__esModule?t:{default:t}}e.EAN13=r.default,e.EAN8=o.default,e.EAN5=i.default,e.EAN2=a.default,e.UPC=u.default,e.UPCE=f.default},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=function t(e,n,r){null===e&&(e=Function.prototype);var o=Object.getOwnPropertyDescriptor(e,n);if(void 0===o){var i=Object.getPrototypeOf(e);return null===i?void 0:t(i,n,r)}if("value"in o)return o.value;var a=o.get;return void 0!==a?a.call(r):void 0},a=n(2),u=n(8),f=(r=u)&&r.__esModule?r:{default:r};var c=function(t){return(10-t.substr(0,12).split("").map((function(t){return+t})).reduce((function(t,e,n){return n%2?t+3*e:t+e}),0)%10)%10},s=function(t){function e(t,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),-1!==t.search(/^[0-9]{12}$/)&&(t+=c(t));var r=function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n));return r.lastChar=n.lastChar,r}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return-1!==this.data.search(/^[0-9]{13}$/)&&+this.data[12]===c(this.data)}},{key:"leftText",value:function(){return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"leftText",this).call(this,1,6)}},{key:"leftEncode",value:function(){var t=this.data.substr(1,6),n=a.EAN13_STRUCTURE[this.data[0]];return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"leftEncode",this).call(this,t,n)}},{key:"rightText",value:function(){return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"rightText",this).call(this,7,6)}},{key:"rightEncode",value:function(){var t=this.data.substr(7,6);return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"rightEncode",this).call(this,t,"RRRRRR")}},{key:"encodeGuarded",value:function(){var t=i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"encodeGuarded",this).call(this);return this.options.displayValue&&(t.unshift({data:"000000000000",text:this.text.substr(0,1),options:{textAlign:"left",fontSize:this.fontSize}}),this.options.lastChar&&(t.push({data:"00"}),t.push({data:"00000",text:this.options.lastChar,options:{fontSize:this.fontSize}}))),t}}]),e}(f.default);e.default=s},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=function t(e,n,r){null===e&&(e=Function.prototype);var o=Object.getOwnPropertyDescriptor(e,n);if(void 0===o){var i=Object.getPrototypeOf(e);return null===i?void 0:t(i,n,r)}if("value"in o)return o.value;var a=o.get;return void 0!==a?a.call(r):void 0},a=n(8),u=(r=a)&&r.__esModule?r:{default:r};var f=function(t){return(10-t.substr(0,7).split("").map((function(t){return+t})).reduce((function(t,e,n){return n%2?t+e:t+3*e}),0)%10)%10},c=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),-1!==t.search(/^[0-9]{7}$/)&&(t+=f(t)),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return-1!==this.data.search(/^[0-9]{8}$/)&&+this.data[7]===f(this.data)}},{key:"leftText",value:function(){return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"leftText",this).call(this,0,4)}},{key:"leftEncode",value:function(){var t=this.data.substr(0,4);return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"leftEncode",this).call(this,t,"LLLL")}},{key:"rightText",value:function(){return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"rightText",this).call(this,4,4)}},{key:"rightEncode",value:function(){var t=this.data.substr(4,4);return i(e.prototype.__proto__||Object.getPrototypeOf(e.prototype),"rightEncode",this).call(this,t,"RRRR")}}]),e}(u.default);e.default=c},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),o=n(2),i=u(n(3)),a=u(n(0));function u(t){return t&&t.__esModule?t:{default:t}}var f=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),r(e,[{key:"valid",value:function(){return-1!==this.data.search(/^[0-9]{5}$/)}},{key:"encode",value:function(){var t,e=o.EAN5_STRUCTURE[(t=this.data,t.split("").map((function(t){return+t})).reduce((function(t,e,n){return n%2?t+9*e:t+3*e}),0)%10)];return{data:"1011"+(0,i.default)(this.data,e,"01"),text:this.text}}}]),e}(a.default);e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),o=n(2),i=a(n(3));function a(t){return t&&t.__esModule?t:{default:t}}var u=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),r(e,[{key:"valid",value:function(){return-1!==this.data.search(/^[0-9]{2}$/)}},{key:"encode",value:function(){var t=o.EAN2_STRUCTURE[parseInt(this.data)%4];return{data:"1011"+(0,i.default)(this.data,t,"01"),text:this.text}}}]),e}(a(n(0)).default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),o=u(n(3)),i=u(n(0)),a=n(9);function u(t){return t&&t.__esModule?t:{default:t}}function f(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}var c=["XX00000XXX","XX10000XXX","XX20000XXX","XXX00000XX","XXXX00000X","XXXXX00005","XXXXX00006","XXXXX00007","XXXXX00008","XXXXX00009"],s=[["EEEOOO","OOOEEE"],["EEOEOO","OOEOEE"],["EEOOEO","OOEEOE"],["EEOOOE","OOEEEO"],["EOEEOO","OEOOEE"],["EOOEEO","OEEOOE"],["EOOOEE","OEEEOO"],["EOEOEO","OEOEOE"],["EOEOOE","OEOEEO"],["EOOEOE","OEEOEO"]],l=function(t){function e(t,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e);var r=f(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n));if(r.isValid=!1,-1!==t.search(/^[0-9]{6}$/))r.middleDigits=t,r.upcA=p(t,"0"),r.text=n.text||""+r.upcA[0]+t+r.upcA[r.upcA.length-1],r.isValid=!0;else{if(-1===t.search(/^[01][0-9]{7}$/))return f(r);if(r.middleDigits=t.substring(1,t.length-1),r.upcA=p(r.middleDigits,t[0]),r.upcA[r.upcA.length-1]!==t[t.length-1])return f(r);r.isValid=!0}return r.displayValue=n.displayValue,n.fontSize>10*n.width?r.fontSize=10*n.width:r.fontSize=n.fontSize,r.guardHeight=n.height+r.fontSize/2+n.textMargin,r}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),r(e,[{key:"valid",value:function(){return this.isValid}},{key:"encode",value:function(){return this.options.flat?this.flatEncoding():this.guardedEncoding()}},{key:"flatEncoding",value:function(){var t="";return t+="101",t+=this.encodeMiddleDigits(),{data:t+="010101",text:this.text}}},{key:"guardedEncoding",value:function(){var t=[];return this.displayValue&&t.push({data:"00000000",text:this.text[0],options:{textAlign:"left",fontSize:this.fontSize}}),t.push({data:"101",options:{height:this.guardHeight}}),t.push({data:this.encodeMiddleDigits(),text:this.text.substring(1,7),options:{fontSize:this.fontSize}}),t.push({data:"010101",options:{height:this.guardHeight}}),this.displayValue&&t.push({data:"00000000",text:this.text[7],options:{textAlign:"right",fontSize:this.fontSize}}),t}},{key:"encodeMiddleDigits",value:function(){var t=this.upcA[0],e=this.upcA[this.upcA.length-1],n=s[parseInt(e)][parseInt(t)];return(0,o.default)(this.middleDigits,n)}}]),e}(i.default);function p(t,e){for(var n=parseInt(t[t.length-1]),r=c[n],o="",i=0,u=0;u<r.length;u++){var f=r[u];o+="X"===f?t[i++]:f}return""+(o=""+e+o)+(0,a.checksum)(o)}e.default=l},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.ITF14=e.ITF=void 0;var r=i(n(10)),o=i(n(33));function i(t){return t&&t.__esModule?t:{default:t}}e.ITF=r.default,e.ITF14=o.default},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});e.START_BIN="1010",e.END_BIN="11101",e.BINARIES=["00110","10001","01001","11000","00101","10100","01100","00011","10010","01010"]},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(10),a=(r=i)&&r.__esModule?r:{default:r};var u=function(t){var e=t.substr(0,13).split("").map((function(t){return parseInt(t,10)})).reduce((function(t,e,n){return t+e*(3-n%2*2)}),0);return 10*Math.ceil(e/10)-e},f=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),-1!==t.search(/^[0-9]{13}$/)&&(t+=u(t)),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return-1!==this.data.search(/^[0-9]{14}$/)&&+this.data[13]===u(this.data)}}]),e}(a.default);e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.MSI1110=e.MSI1010=e.MSI11=e.MSI10=e.MSI=void 0;var r=f(n(4)),o=f(n(35)),i=f(n(36)),a=f(n(37)),u=f(n(38));function f(t){return t&&t.__esModule?t:{default:t}}e.MSI=r.default,e.MSI10=o.default,e.MSI11=i.default,e.MSI1010=a.default,e.MSI1110=u.default},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=n(4),i=(r=o)&&r.__esModule?r:{default:r},a=n(6);var u=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t+(0,a.mod10)(t),n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),e}(i.default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=n(4),i=(r=o)&&r.__esModule?r:{default:r},a=n(6);var u=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t+(0,a.mod11)(t),n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),e}(i.default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=n(4),i=(r=o)&&r.__esModule?r:{default:r},a=n(6);var u=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),t+=(0,a.mod10)(t),t+=(0,a.mod10)(t),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),e}(i.default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=n(4),i=(r=o)&&r.__esModule?r:{default:r},a=n(6);var u=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),t+=(0,a.mod11)(t),t+=(0,a.mod10)(t),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),e}(i.default);e.default=u},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.pharmacode=void 0;var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(0);var a=function(t){function e(t,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e);var r=function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n));return r.number=parseInt(t,10),r}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"encode",value:function(){for(var t=this.number,e="";!isNaN(t)&&0!=t;)t%2==0?(e="11100"+e,t=(t-2)/2):(e="100"+e,t=(t-1)/2);return{data:e=e.slice(0,-2),text:this.text}}},{key:"valid",value:function(){return this.number>=3&&this.number<=131070}}]),e}(((r=i)&&r.__esModule?r:{default:r}).default);e.pharmacode=a},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.codabar=void 0;var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(0);var a=function(t){function e(t,n){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),0===t.search(/^[0-9\-\$\:\.\+\/]+$/)&&(t="A"+t+"A");var r=function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t.toUpperCase(),n));return r.text=r.options.text||r.text.replace(/[A-D]/g,""),r}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return-1!==this.data.search(/^[A-D][0-9\-\$\:\.\+\/]+[A-D]$/)}},{key:"encode",value:function(){for(var t=[],e=this.getEncodings(),n=0;n<this.data.length;n++)t.push(e[this.data.charAt(n)]),n!==this.data.length-1&&t.push("0");return{text:this.text,data:t.join("")}}},{key:"getEncodings",value:function(){return{0:"101010011",1:"101011001",2:"101001011",3:"110010101",4:"101101001",5:"110101001",6:"100101011",7:"100101101",8:"100110101",9:"110100101","-":"101001101",$:"101100101",":":"1101011011","/":"1101101011",".":"1101101101","+":"1011011011",A:"1011001001",B:"1001001011",C:"1010010011",D:"1010011001"}}}]),e}(((r=i)&&r.__esModule?r:{default:r}).default);e.codabar=a},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.CODE93FullASCII=e.CODE93=void 0;var r=i(n(11)),o=i(n(43));function i(t){return t&&t.__esModule?t:{default:t}}e.CODE93=r.default,e.CODE93FullASCII=o.default},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});e.SYMBOLS=["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","-","."," ","$","/","+","%","($)","(%)","(/)","(+)","ÿ"],e.BINARIES=["100010100","101001000","101000100","101000010","100101000","100100100","100100010","101010000","100010010","100001010","110101000","110100100","110100010","110010100","110010010","110001010","101101000","101100100","101100010","100110100","100011010","101011000","101001100","101000110","100101100","100010110","110110100","110110010","110101100","110100110","110010110","110011010","101101100","101100110","100110110","100111010","100101110","111010100","111010010","111001010","101101110","101110110","110101110","100100110","111011010","111010110","100110010","101011110"],e.MULTI_SYMBOLS={"\0":["(%)","U"],"":["($)","A"],"":["($)","B"],"":["($)","C"],"":["($)","D"],"":["($)","E"],"":["($)","F"],"":["($)","G"],"\b":["($)","H"],"\t":["($)","I"],"\n":["($)","J"],"\v":["($)","K"],"\f":["($)","L"],"\r":["($)","M"],"":["($)","N"],"":["($)","O"],"":["($)","P"],"":["($)","Q"],"":["($)","R"],"":["($)","S"],"":["($)","T"],"":["($)","U"],"":["($)","V"],"":["($)","W"],"":["($)","X"],"":["($)","Y"],"":["($)","Z"],"":["(%)","A"],"":["(%)","B"],"":["(%)","C"],"":["(%)","D"],"":["(%)","E"],"!":["(/)","A"],'"':["(/)","B"],"#":["(/)","C"],"&":["(/)","F"],"'":["(/)","G"],"(":["(/)","H"],")":["(/)","I"],"*":["(/)","J"],",":["(/)","L"],":":["(/)","Z"],";":["(%)","F"],"<":["(%)","G"],"=":["(%)","H"],">":["(%)","I"],"?":["(%)","J"],"@":["(%)","V"],"[":["(%)","K"],"\\":["(%)","L"],"]":["(%)","M"],"^":["(%)","N"],_:["(%)","O"],"`":["(%)","W"],a:["(+)","A"],b:["(+)","B"],c:["(+)","C"],d:["(+)","D"],e:["(+)","E"],f:["(+)","F"],g:["(+)","G"],h:["(+)","H"],i:["(+)","I"],j:["(+)","J"],k:["(+)","K"],l:["(+)","L"],m:["(+)","M"],n:["(+)","N"],o:["(+)","O"],p:["(+)","P"],q:["(+)","Q"],r:["(+)","R"],s:["(+)","S"],t:["(+)","T"],u:["(+)","U"],v:["(+)","V"],w:["(+)","W"],x:["(+)","X"],y:["(+)","Y"],z:["(+)","Z"],"{":["(%)","P"],"|":["(%)","Q"],"}":["(%)","R"],"~":["(%)","S"],"":["(%)","T"]}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(11);var a=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"valid",value:function(){return/^[\x00-\x7f]+$/.test(this.data)}}]),e}(((r=i)&&r.__esModule?r:{default:r}).default);e.default=a},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.GenericBarcode=void 0;var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(0);var a=function(t){function e(t,n){return function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,e),function(t,e){if(!t)throw new ReferenceError("this hasn't been initialised - super() hasn't been called");return!e||"object"!=typeof e&&"function"!=typeof e?t:e}(this,(e.__proto__||Object.getPrototypeOf(e)).call(this,t,n))}return function(t,e){if("function"!=typeof e&&null!==e)throw new TypeError("Super expression must either be null or a function, not "+typeof e);t.prototype=Object.create(e&&e.prototype,{constructor:{value:t,enumerable:!1,writable:!0,configurable:!0}}),e&&(Object.setPrototypeOf?Object.setPrototypeOf(t,e):t.__proto__=e)}(e,t),o(e,[{key:"encode",value:function(){return{data:"10101010101010101010101010101010101010101",text:this.text}}},{key:"valid",value:function(){return!0}}]),e}(((r=i)&&r.__esModule?r:{default:r}).default);e.GenericBarcode=a},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.default=function(t){var e=[];return function t(n){if(Array.isArray(n))for(var r=0;r<n.length;r++)t(n[r]);else n.text=n.text||"",n.data=n.data||"",e.push(n)}(t),e}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0}),e.default=function(t){return t.marginTop=t.marginTop||t.margin,t.marginBottom=t.marginBottom||t.margin,t.marginRight=t.marginRight||t.margin,t.marginLeft=t.marginLeft||t.margin,t}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r="function"==typeof Symbol&&"symbol"==typeof Symbol.iterator?function(t){return typeof t}:function(t){return t&&"function"==typeof Symbol&&t.constructor===Symbol&&t!==Symbol.prototype?"symbol":typeof t},o=u(n(48)),i=u(n(49)),a=n(15);function u(t){return t&&t.__esModule?t:{default:t}}function f(t){if("string"==typeof t)return function(t){var e=document.querySelectorAll(t);if(0===e.length)return;for(var n=[],r=0;r<e.length;r++)n.push(f(e[r]));return n}(t);if(Array.isArray(t)){for(var e=[],n=0;n<t.length;n++)e.push(f(t[n]));return e}if("undefined"!=typeof HTMLCanvasElement&&t instanceof HTMLImageElement)return u=t,{element:c=document.createElement("canvas"),options:(0,o.default)(u),renderer:i.default.CanvasRenderer,afterRender:function(){u.setAttribute("src",c.toDataURL())}};if(t&&t.nodeName&&"svg"===t.nodeName.toLowerCase()||"undefined"!=typeof SVGElement&&t instanceof SVGElement)return{element:t,options:(0,o.default)(t),renderer:i.default.SVGRenderer};if("undefined"!=typeof HTMLCanvasElement&&t instanceof HTMLCanvasElement)return{element:t,options:(0,o.default)(t),renderer:i.default.CanvasRenderer};if(t&&t.getContext)return{element:t,renderer:i.default.CanvasRenderer};if(t&&"object"===(void 0===t?"undefined":r(t))&&!t.nodeName)return{element:t,renderer:i.default.ObjectRenderer};throw new a.InvalidElementException;var u,c}e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=i(n(12)),o=i(n(13));function i(t){return t&&t.__esModule?t:{default:t}}e.default=function(t){var e={};for(var n in o.default)o.default.hasOwnProperty(n)&&(t.hasAttribute("jsbarcode-"+n.toLowerCase())&&(e[n]=t.getAttribute("jsbarcode-"+n.toLowerCase())),t.hasAttribute("data-"+n.toLowerCase())&&(e[n]=t.getAttribute("data-"+n.toLowerCase())));return e.value=t.getAttribute("jsbarcode-value")||t.getAttribute("data-value"),e=(0,r.default)(e)}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=a(n(50)),o=a(n(51)),i=a(n(52));function a(t){return t&&t.__esModule?t:{default:t}}e.default={CanvasRenderer:r.default,SVGRenderer:o.default,ObjectRenderer:i.default}},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(7),a=(r=i)&&r.__esModule?r:{default:r},u=n(14);var f=function(){function t(e,n,r){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,t),this.canvas=e,this.encodings=n,this.options=r}return o(t,[{key:"render",value:function(){if(!this.canvas.getContext)throw new Error("The browser does not support canvas.");this.prepareCanvas();for(var t=0;t<this.encodings.length;t++){var e=(0,a.default)(this.options,this.encodings[t].options);this.drawCanvasBarcode(e,this.encodings[t]),this.drawCanvasText(e,this.encodings[t]),this.moveCanvasDrawing(this.encodings[t])}this.restoreCanvas()}},{key:"prepareCanvas",value:function(){var t=this.canvas.getContext("2d");t.save(),(0,u.calculateEncodingAttributes)(this.encodings,this.options,t);var e=(0,u.getTotalWidthOfEncodings)(this.encodings),n=(0,u.getMaximumHeightOfEncodings)(this.encodings);this.canvas.width=e+this.options.marginLeft+this.options.marginRight,this.canvas.height=n,t.clearRect(0,0,this.canvas.width,this.canvas.height),this.options.background&&(t.fillStyle=this.options.background,t.fillRect(0,0,this.canvas.width,this.canvas.height)),t.translate(this.options.marginLeft,0)}},{key:"drawCanvasBarcode",value:function(t,e){var n,r=this.canvas.getContext("2d"),o=e.data;n="top"==t.textPosition?t.marginTop+t.fontSize+t.textMargin:t.marginTop,r.fillStyle=t.lineColor;for(var i=0;i<o.length;i++){var a=i*t.width+e.barcodePadding;"1"===o[i]?r.fillRect(a,n,t.width,t.height):o[i]&&r.fillRect(a,n,t.width,t.height*o[i])}}},{key:"drawCanvasText",value:function(t,e){var n,r,o=this.canvas.getContext("2d"),i=t.fontOptions+" "+t.fontSize+"px "+t.font;t.displayValue&&(r="top"==t.textPosition?t.marginTop+t.fontSize-t.textMargin:t.height+t.textMargin+t.marginTop+t.fontSize,o.font=i,"left"==t.textAlign||e.barcodePadding>0?(n=0,o.textAlign="left"):"right"==t.textAlign?(n=e.width-1,o.textAlign="right"):(n=e.width/2,o.textAlign="center"),o.fillText(e.text,n,r))}},{key:"moveCanvasDrawing",value:function(t){this.canvas.getContext("2d").translate(t.width,0)}},{key:"restoreCanvas",value:function(){this.canvas.getContext("2d").restore()}}]),t}();e.default=f},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r,o=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}(),i=n(7),a=(r=i)&&r.__esModule?r:{default:r},u=n(14);var f="http://www.w3.org/2000/svg",c=function(){function t(e,n,r){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,t),this.svg=e,this.encodings=n,this.options=r,this.document=r.xmlDocument||document}return o(t,[{key:"render",value:function(){var t=this.options.marginLeft;this.prepareSVG();for(var e=0;e<this.encodings.length;e++){var n=this.encodings[e],r=(0,a.default)(this.options,n.options),o=this.createGroup(t,r.marginTop,this.svg);this.setGroupOptions(o,r),this.drawSvgBarcode(o,r,n),this.drawSVGText(o,r,n),t+=n.width}}},{key:"prepareSVG",value:function(){for(;this.svg.firstChild;)this.svg.removeChild(this.svg.firstChild);(0,u.calculateEncodingAttributes)(this.encodings,this.options);var t=(0,u.getTotalWidthOfEncodings)(this.encodings),e=(0,u.getMaximumHeightOfEncodings)(this.encodings),n=t+this.options.marginLeft+this.options.marginRight;this.setSvgAttributes(n,e),this.options.background&&this.drawRect(0,0,n,e,this.svg).setAttribute("fill",this.options.background)}},{key:"drawSvgBarcode",value:function(t,e,n){var r,o=n.data;r="top"==e.textPosition?e.fontSize+e.textMargin:0;for(var i=0,a=0,u=0;u<o.length;u++)a=u*e.width+n.barcodePadding,"1"===o[u]?i++:i>0&&(this.drawRect(a-e.width*i,r,e.width*i,e.height,t),i=0);i>0&&this.drawRect(a-e.width*(i-1),r,e.width*i,e.height,t)}},{key:"drawSVGText",value:function(t,e,n){var r,o,i=this.document.createElementNS(f,"text");e.displayValue&&(i.setAttribute("font-family",e.font),i.setAttribute("font-size",e.fontSize),e.fontOptions.includes("bold")&&i.setAttribute("font-weight","bold"),e.fontOptions.includes("italic")&&i.setAttribute("font-style","italic"),o="top"==e.textPosition?e.fontSize-e.textMargin:e.height+e.textMargin+e.fontSize,"left"==e.textAlign||n.barcodePadding>0?(r=0,i.setAttribute("text-anchor","start")):"right"==e.textAlign?(r=n.width-1,i.setAttribute("text-anchor","end")):(r=n.width/2,i.setAttribute("text-anchor","middle")),i.setAttribute("x",r),i.setAttribute("y",o),i.appendChild(this.document.createTextNode(n.text)),t.appendChild(i))}},{key:"setSvgAttributes",value:function(t,e){var n=this.svg;n.setAttribute("width",t+"px"),n.setAttribute("height",e+"px"),n.setAttribute("x","0px"),n.setAttribute("y","0px"),n.setAttribute("viewBox","0 0 "+t+" "+e),n.setAttribute("xmlns",f),n.setAttribute("version","1.1")}},{key:"createGroup",value:function(t,e,n){var r=this.document.createElementNS(f,"g");return r.setAttribute("transform","translate("+t+", "+e+")"),n.appendChild(r),r}},{key:"setGroupOptions",value:function(t,e){t.setAttribute("fill",e.lineColor)}},{key:"drawRect",value:function(t,e,n,r,o){var i=this.document.createElementNS(f,"rect");return i.setAttribute("x",t),i.setAttribute("y",e),i.setAttribute("width",n),i.setAttribute("height",r),o.appendChild(i),i}}]),t}();e.default=c},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}();var o=function(){function t(e,n,r){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,t),this.object=e,this.encodings=n,this.options=r}return r(t,[{key:"render",value:function(){this.object.encodings=this.encodings}}]),t}();e.default=o},function(t,e,n){"use strict";Object.defineProperty(e,"__esModule",{value:!0});var r=function(){function t(t,e){for(var n=0;n<e.length;n++){var r=e[n];r.enumerable=r.enumerable||!1,r.configurable=!0,"value"in r&&(r.writable=!0),Object.defineProperty(t,r.key,r)}}return function(e,n,r){return n&&t(e.prototype,n),r&&t(e,r),e}}();var o=function(){function t(e){!function(t,e){if(!(t instanceof e))throw new TypeError("Cannot call a class as a function")}(this,t),this.api=e}return r(t,[{key:"handleCatch",value:function(t){if("InvalidInputException"!==t.name)throw t;if(this.api._options.valid===this.api._defaults.valid)throw t.message;this.api._options.valid(!1),this.api.render=function(){}}},{key:"wrapBarcodeCall",value:function(t){try{var e=t.apply(void 0,arguments);return this.api._options.valid(!0),e}catch(t){return this.handleCatch(t),this.api}}}]),t}();e.default=o}]);
+
+/* ---------------- sample data ---------------- */
+const SIZES=["XS","S","M","L","XL"];
+const state={
+  role:'staff',            // 'staff' | 'owner'
+  pin:'1234',
+  store:'FRCS',
+  stores:[{code:'FRCS',name:'FRCS 台南'}],
+  mode:'pos',
+  posTab:'register',
+  stockTab:'styles',
+  opsTab:'preorders',
+  finTab:'purchase',
+  cart:[],
+  cartMember:null,
+  cartDiscount:0,
+  members:[
+    {phone:"0912345678", name:"L 小姐", tier:"VIP", disc:0.9, spent:48200, joined:"2026.03"},
+    {phone:"0928777123", name:"陳先生", tier:"一般", disc:0.95, spent:12600, joined:"2026.05"},
+  ],
+  styles:[
+    {no:"21497", name:"顏染造型衫-淺灰", cat:"上衣", gender:"男", cost:520, price:1480, low:1, qty:3},
+    {no:"21498", name:"顏染造型衫-深灰", cat:"上衣", gender:"男", cost:520, price:1480, low:1, qty:1},
+    {no:"21478", name:"圓領針織衫/灰",   cat:"上衣", gender:"男", cost:680, price:1880, low:1, qty:0},
+    {no:"20113", name:"單寧外套-軟面料黑", cat:"外套", gender:"男", cost:1850, price:4980, low:1, qty:2},
+    {no:"22275", name:"丹寧側釦彎刀褲藍M", cat:"下身", gender:"男", cost:960, price:2680, low:1, qty:4},
+    {no:"22353", name:"百慕達短褲-黑色",  cat:"下身", gender:"男", cost:540, price:1580, low:2, qty:5},
+    {no:"31201", name:"泡泡袖襯衫-白",    cat:"上衣", gender:"女", cost:610, price:1680, low:1, qty:2},
+    {no:"32104", name:"高腰寬褲-炭灰",    cat:"下身", gender:"女", cost:880, price:2380, low:1, qty:1},
+  ],
+  cats:["上衣","下身","外套"],
+  genders:["男","女"],
+  filter:{cat:"全部",gender:"全部"},
+  preorders:[
+    {no:"PO-0417", sku:"20113", qty:1, price:4980, deposit:2000, stage:"收訂金", cust:"L 小姐"},
+    {no:"PO-0418", sku:"21478", qty:1, price:1880, deposit:500,  stage:"已到貨", cust:"陳先生"},
+  ],
+  topay:[
+    {no:"TP-0091", who:"Seoul 採買尾款", amt:48000, cat:"進貨貨款"},
+  ],
+  expenses:[
+    {date:"07/01", cat:"房租", amt:38000, who:"房東", note:"7月"},
+    {date:"07/03", cat:"進貨貨款", amt:62000, who:"Seoul", note:"Q3 首批訂金"},
+    {date:"07/05", cat:"行銷", amt:6500, who:"IG 投放", note:"ISSUE 03"},
+  ],
+  sales:[
+    {date:"07/02", sku:"21497", qty:1, amt:1480, cost:520},
+    {date:"07/04", sku:"22353", qty:1, amt:1580, cost:540},
+    {date:"07/06", sku:"20113", qty:1, amt:4980, cost:1850},
+  ],
+  picks:{pay:"現金"},
+  purchases:[
+    {no:"PO26-03", vendor:"Seoul / 東大門 A", currency:"KRW", rate:0.0235,
+      freight:8200, duty:3400, stage:"已到貨", ordered:"2026-06-02", eta:"2026-07-15",
+      items:[
+        {no:"21501", name:"顏染造型衫-黑", cat:"上衣", gender:"男", unitFx:22000, qty:4},
+        {no:"21502", name:"顏染造型衫-軍綠", cat:"上衣", gender:"男", unitFx:22000, qty:3},
+        {no:"20140", name:"教練外套-炭", cat:"外套", gender:"男", unitFx:68000, qty:2},
+      ]},
+    {no:"PO26-04", vendor:"Seoul / 聖水 B", currency:"KRW", rate:0.0235,
+      freight:5600, duty:0, stage:"已訂購", ordered:"2026-07-01", eta:"2026-08-20",
+      items:[
+        {no:"32110", name:"垂墜寬褲-奶茶", cat:"下身", gender:"女", unitFx:41000, qty:5},
+      ]},
+  ],
+};
+
+/* ---- 成本遮蔽:唯一的權限判斷 ---- */
+function canSeeCost(){return state.role==='owner';}
+function money(n){return 'NT$'+Math.round(n||0).toLocaleString();}
+
+/* ---- 採購成本計算:貨款換匯 + 運費關稅按件攤提 ---- */
+function poTotals(p){
+  const units=p.items.reduce((a,i)=>a+i.qty,0);
+  const goods=p.items.reduce((a,i)=>a+i.unitFx*p.rate*i.qty,0);
+  const extra=(p.freight||0)+(p.duty||0);
+  const perUnitExtra=units?extra/units:0;
+  return {units,goods,extra,perUnitExtra,total:goods+extra};
+}
+function poUnitCost(p,item){
+  const t=poTotals(p);
+  return item.unitFx*p.rate + t.perUnitExtra;
+}
+
+const PRE_STAGES=["收訂金","已到貨","已出貨","已收尾款"];
+const PO_STAGES=["已訂購","已付款","已出貨","已到貨","已配送","已入倉"];
+
+/* ================= 雲端同步層 ================= */
+const API_KEY_LS='acave_api_url';
+let API_URL = localStorage.getItem(API_KEY_LS) || '';
+let syncState = 'offline'; // offline | ok | syncing | error
+let pendingQueue = JSON.parse(localStorage.getItem('acave_queue')||'[]');
+let lastError='';
+
+function setSync(s,msg){
+  syncState=s;
+  const el=document.getElementById('syncDot');
+  if(!el)return;
+  const map={ok:['●','var(--green)','已同步'],syncing:['◐','var(--amber)','同步中'],
+             error:['●','var(--red)','同步失敗'],offline:['○','var(--muted)','未連線']};
+  const [ic,color,label]=map[s]||map.offline;
+  el.innerHTML=`<span style="color:${color}">${ic}</span> ${msg||label}`;
+}
+function saveQueue(){localStorage.setItem('acave_queue',JSON.stringify(pendingQueue));}
+
+/* 送出一個動作;失敗則排進佇列,連線後自動補送 */
+/* 所有請求一律走 POST。
+   原因:Apps Script 的 GET 回應帶 Content-Disposition: attachment,
+   Safari 會把它當成檔案下載,<script> 標籤不執行它,JSONP 因此永遠逾時。
+   POST 用 text/plain 不觸發 CORS preflight,回應可正常讀取。 */
+async function apiPost(body, timeoutMs){
+  if(!API_URL) throw new Error('尚未設定後端網址');
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), timeoutMs||60000);
+  try{
+    const res = await fetch(API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+      redirect:'follow'
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    return await res.json();
+  }catch(err){
+    if(err.name==='AbortError') throw new Error('連線逾時');
+    throw new Error(err.message||'連線失敗');
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+async function api(action, payload){
+  if(!API_URL){ return {ok:false, error:'尚未設定後端網址'}; }
+  const body=Object.assign({action, store:state.store}, payload);
+  try{
+    setSync('syncing');
+    const j = await apiPost(body, 40000);
+    if(!j.ok) throw new Error(j.error||'後端回傳錯誤');
+    setSync('ok');
+    return j;
+  }catch(err){
+    lastError=String(err.message||err);
+    pendingQueue.push(body); saveQueue();
+    setSync('error','待補送 '+pendingQueue.length);
+    return {ok:false, error:lastError, queued:true};
+  }
+}
+
+async function flushQueue(){
+  if(!API_URL || !pendingQueue.length) return;
+  setSync('syncing','補送 '+pendingQueue.length);
+  while(pendingQueue.length){
+    try{
+      const j = await apiPost(pendingQueue[0], 40000);
+      if(!j.ok) break;
+      pendingQueue.shift(); saveQueue();
+    }catch(e){ break; }
+  }
+  if(!pendingQueue.length) setSync('ok');
+  else setSync('error','待補送 '+pendingQueue.length);
+}
+
+async function cloudLoad(silent){
+  if(!API_URL){ setSync('offline'); return false; }
+  try{
+    setSync('syncing','載入中');
+    const j = await apiPost({action:'load', store:state.store}, 60000);
+    if(!j.ok) throw new Error(j.error||'後端回傳錯誤');
+    const d=j.data;
+    if(d.store) state.store=d.store;
+    if(d.stores && d.stores.length) state.stores=d.stores;
+    state.transfers = d.transfers||[];
+    state.styles    = (d.items||[]).map(normItem);
+    state.members   = (d.members||[]).map(m=>({...m, disc:Number(m.disc)||0.95, spent:Number(m.spent)||0}));
+    state.txns      = d.txns||[];
+    state.sales     = (d.sales||[]).map(s=>({...s, qty:Number(s.qty)||0, amt:Number(s.amt)||0, cost:Number(s.cost)||0}));
+    state.preorders = (d.preorders||[]).map(p=>({...p, qty:Number(p.qty)||1, price:Number(p.price)||0, deposit:Number(p.deposit)||0}));
+    state.purchases = (d.purchases||[]).map(p=>({...p, rate:Number(p.rate)||1,
+                        freight:Number(p.freight)||0, duty:Number(p.duty)||0, items:p.items||[]}));
+    state.expenses  = (d.expenses||[]).map(e=>({...e, amt:Number(e.amt)||0}));
+    state.topay     = (d.topay||[]).map(t=>({...t, amt:Number(t.amt)||0}));
+    state.returns   = d.returns||[];
+    state.intakeLog = d.intakeLog||[];
+    if(d.config && d.config.pin) state.pin=String(d.config.pin);
+    setSync('ok');
+    if(!silent) toast('已載入 '+state.styles.length+' 項商品');
+    await flushQueue();
+    return true;
+  }catch(err){
+    lastError=err.message;
+    setSync('error');
+    if(!silent) toast('載入失敗:'+err.message);
+    return false;
+  }
+}
+
+function normItem(i){
+  return {no:String(i.no), name:i.name, cat:i.cat, gender:i.gender,
+    cost:Number(i.cost)||0, price:Number(i.price)||0,
+    qty:Number(i.qty)||0, low:Number(i.low)||1,
+    elsewhere:(i.elsewhere||[]).filter(e=>Number(e.qty)>0)};
+}
+
+/* ---- 店別切換(只有多店時才顯示) ---- */
+function updateBrand(){
+  const el=document.getElementById('brandName');
+  if(el) el.textContent = state.store || 'FRCS';
+}
+function renderStoreBar(){
+  updateBrand();
+  const el=document.getElementById('storeBar');
+  if(!el)return;
+  if(!state.stores || state.stores.length<2){ el.style.display='none'; return; }
+  el.style.display='flex';
+  el.innerHTML=state.stores.map(s=>
+    `<div class="fchip ${state.store===s.code?'on':''}" onclick="switchStore('${s.code}')">${s.name||s.code}</div>`).join('');
+}
+async function switchStore(code){
+  if(code===state.store)return;
+  if(pendingQueue.length){toast('尚有 '+pendingQueue.length+' 筆待同步,請先補送');return;}
+  state.store=code;
+  const ok=await cloudLoad();
+  if(ok){renderStoreBar();refreshCurrentView();toast('已切換至 '+code);}
+}
+
+/* 設定頁 */
+function openSettings(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>雲端設定</h3><div class="sub">連線到 Google Sheets 後端</div>
+    <label class="fld">Apps Script 部署網址</label>
+    <input class="f" id="cfg_url" value="${API_URL}" placeholder="https://script.google.com/macros/s/.../exec">
+    <button class="btn" style="margin-top:12px" onclick="saveApiUrl()">儲存並連線</button>
+    <button class="btn ghost sm" onclick="cloudLoad()">重新載入雲端資料</button>
+    <button class="btn ghost sm" onclick="testConn()">測試連線</button>
+    ${pendingQueue.length?`<button class="btn gilt sm" onclick="flushQueue()">補送 ${pendingQueue.length} 筆待同步</button>`:''}
+    ${lastError?`<div class="hint" style="color:var(--red);margin-top:10px">最後錯誤:${lastError}</div>`:''}
+    <div class="hint">網址取得方式:Apps Script → 部署 → 網頁應用程式 → 執行身分「我」、存取權「任何人」。
+    店長的裝置填同一個網址即可共用資料。</div>`);
+}
+async function testConn(){
+  if(!API_URL){toast('請先填網址');return;}
+  try{
+    setSync('syncing','測試中');
+    const j=await apiPost({action:'ping'}, 20000);
+    setSync('ok');
+    toast(j.ok?'連線正常 ✓':'後端回傳異常');
+  }catch(e){
+    lastError=e.message; setSync('error');
+    toast('連線失敗:'+e.message);
+  }
+}
+
+async function saveApiUrl(){
+  API_URL=val('cfg_url').trim();
+  localStorage.setItem(API_KEY_LS,API_URL);
+  closeModal();
+  if(API_URL){ const ok=await cloudLoad(); if(ok)refreshCurrentView(); }
+  else setSync('offline');
+}
+function refreshCurrentView(){
+  const t=state[MODE_TAB[state.mode]];
+  const tab=TABS[state.mode].find(x=>x.id===t);
+  if(tab)showView(tab.view,tab.id);
+}
+
+/* ---------------- tab config ---------------- */
+const TABS={
+  pos:[
+    {id:'register',view:'v-register',ic:'$', label:'結帳'},
+    {id:'members', view:'v-members', ic:'♦', label:'會員'},
+    {id:'txns',    view:'v-txns',    ic:'▦', label:'交易'},
+  ],
+  stock:[
+    {id:'styles', view:'v-styles', ic:'▤', label:'商品'},
+    {id:'intake', view:'v-intake', ic:'＋', label:'入庫'},
+    {id:'count',  view:'v-count',  ic:'✓', label:'盤點'},
+    {id:'labels', view:'v-labels', ic:'▥', label:'標籤'},
+    {id:'restock',view:'v-restock',ic:'!', label:'叫貨'},
+  ],
+  ops:[
+    {id:'preorders',view:'v-preorders',ic:'◷', label:'預購'},
+  ],
+  fin:[
+    {id:'purchase',view:'v-purchase',ic:'⇥', label:'採購'},
+    {id:'expense',view:'v-expense',ic:'−', label:'開銷'},
+    {id:'returns',view:'v-sale',   ic:'↺', label:'退換貨'},
+    {id:'report', view:'v-report', ic:'▦', label:'報表'},
+  ]
+};
+const MODE_TAB={pos:'posTab',stock:'stockTab',ops:'opsTab',fin:'finTab'};
+const MODE_LABEL={pos:'收銀',stock:'商品庫存',ops:'預購',fin:'帳務'};
+const STAFF_MODES=['pos','stock','ops'];
+const OWNER_MODES=['pos','stock','ops','fin'];
+
+function allowedModes(){return state.role==='owner'?OWNER_MODES:STAFF_MODES;}
+
+/* ---------------- render helpers ---------------- */
+function renderModebar(){
+  const mb=document.getElementById('modebar');
+  const modes=allowedModes();
+  let html=modes.map(m=>
+    `<button class="${state.mode===m?'on':''}" onclick="setMode('${m}')">${MODE_LABEL[m]}</button>`).join('');
+  html+= state.role==='owner'
+    ? `<button class="lockbtn" onclick="lockOwner()" title="鎖定">🔓</button>`
+    : `<button class="lockbtn" onclick="openPin()" title="老闆模式">🔒</button>`;
+  mb.innerHTML=html;
+}
+function setMode(m){
+  if(!allowedModes().includes(m)){openPin();return;}
+  state.mode=m;
+  const first=TABS[m][0];
+  state[MODE_TAB[m]]=first.id;
+  renderModebar();
+  showView(first.view, first.id);
+}
+function renderTabs(){
+  const tb=document.getElementById('tabs');
+  const cur=state[MODE_TAB[state.mode]];
+  tb.innerHTML=TABS[state.mode].map(t=>
+    `<button class="${t.id===cur?'on':''}" onclick="showView('${t.view}','${t.id}')">
+       <span class="ic">${t.ic}</span>${t.label}</button>`).join('');
+}
+function showView(viewId, tabId){
+  state[MODE_TAB[state.mode]]=tabId;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('on'));
+  document.getElementById(viewId).classList.add('on');
+  renderTabs();
+  document.getElementById('body').scrollTop=0;
+  if(tabId==='register')renderRegister();
+  if(tabId==='members')renderMembers();
+  if(tabId==='txns')renderTxns();
+  if(tabId==='preorders')renderPreTrack();
+  if(tabId==='restock')renderLow();
+  if(tabId==='styles'){renderStyleActions();renderStyles();}
+  if(tabId==='intake')fillIntakeSelect();
+  if(tabId==='count')renderCount();
+  if(tabId==='labels')renderLabels();
+  if(tabId==='returns'){fillSaleStyles();renderReturnList();}
+  if(tabId==='purchase')renderPurchase();
+  if(tabId==='expense')renderTopay();
+  if(tabId==='report')renderReport();
+}
+
+function renderStyleActions(){
+  const el=document.getElementById('styleActions');if(!el)return;
+  el.innerHTML = canSeeCost()
+    ? `<button class="btn ghost sm" style="width:auto;margin:0 0 0 6px" onclick="openImport()">匯入</button>
+       <button class="btn ghost sm" style="width:auto;margin:0 0 0 6px" onclick="openNewStyle()">＋ 新商品</button>`
+    : `<button class="btn ghost sm" style="width:auto;margin:0" onclick="openNewStyle()">＋ 新商品</button>`;
+}
+
+/* ---------------- PIN / role ---------------- */
+function openPin(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>老闆模式</h3><div class="sub">輸入 PIN 解鎖庫存與帳務</div>
+    <input class="f" id="pin_in" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
+      style="text-align:center;font-size:24px;letter-spacing:8px" onkeydown="if(event.key==='Enter')doPin()">
+    <button class="btn" style="margin-top:14px" onclick="doPin()">解鎖</button>
+    <div class="hint">預設 PIN 為 1234,解鎖後可在帳務→開銷頁底變更。</div>`);
+  setTimeout(()=>document.getElementById('pin_in').focus(),100);
+}
+function doPin(){
+  if(val('pin_in')!==state.pin){toast('PIN 錯誤');return;}
+  state.role='owner';closeModal();renderModebar();
+  const t=state[MODE_TAB[state.mode]];
+  const tab=TABS[state.mode].find(x=>x.id===t);
+  if(tab)showView(tab.view,tab.id);
+  toast('已解鎖老闆模式');
+}
+function lockOwner(){
+  state.role='staff';
+  if(!STAFF_MODES.includes(state.mode))state.mode='pos';
+  renderModebar();
+  const first=TABS[state.mode][0];
+  state[MODE_TAB[state.mode]]=first.id;
+  showView(first.view,first.id);
+  toast('已鎖定,回到店員模式');
+}
+function openChangePin(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>變更 PIN</h3><div class="sub">4–6 位數字</div>
+    <label class="fld">新 PIN</label>
+    <input class="f" id="np_1" type="password" inputmode="numeric" maxlength="6">
+    <label class="fld">再輸入一次</label>
+    <input class="f" id="np_2" type="password" inputmode="numeric" maxlength="6">
+    <button class="btn" style="margin-top:14px" onclick="doChangePin()">儲存</button>`);
+}
+function doChangePin(){
+  const a=val('np_1'),b=val('np_2');
+  if(a.length<4){toast('至少 4 位數');return;}
+  if(a!==b){toast('兩次不一致');return;}
+  state.pin=a;api('setConfig',{key:'pin',value:a});closeModal();toast('PIN 已變更');
+}
+
+function qtyClass(q,low){ if(q===0)return'q0'; if(q<=low)return'qlow'; return'qok'; }
+
+function renderFilters(){
+  const fc=document.getElementById('filterCat');
+  const fg=document.getElementById('filterGender');
+  fc.innerHTML=["全部",...state.cats].map(c=>
+    `<div class="fchip ${state.filter.cat===c?'on':''}" onclick="setFilter('cat','${c}')">${c}</div>`).join('');
+  fg.innerHTML=["全部",...state.genders].map(g=>
+    `<div class="fchip ${state.filter.gender===g?'on':''}" onclick="setFilter('gender','${g}')">${g}</div>`).join('');
+}
+function setFilter(dim,v){state.filter[dim]=v;renderStyles();}
+
+function renderStyles(){
+  renderFilters();
+  const el=document.getElementById('styleList');
+  const q=(document.getElementById('styleSearch')?.value||'').trim();
+  const list=state.styles.filter(s=>
+    (state.filter.cat==='全部'||s.cat===state.filter.cat) &&
+    (state.filter.gender==='全部'||s.gender===state.filter.gender) &&
+    (!q||s.no.includes(q)||s.name.includes(q)));
+  if(!list.length){el.innerHTML=`<div class="empty">${q?'查無符合商品':'此分類沒有商品'}</div>`;return;}
+  el.innerHTML=list.map(s=>{
+    const margin=s.price-s.cost;
+    const mpct=s.price?Math.round(margin/s.price*100):0;
+    return `<div class="card">
+      <div class="style-head">
+        <div style="flex:1;min-width:0">
+          <div class="style-no">${s.no}</div>
+          <div class="style-name">${s.name}</div>
+          <div class="tags-row">
+            <span class="tag gender">${s.gender}</span>
+            <span class="tag cat">${s.cat}</span>
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="mono" style="font-size:17px;font-weight:700">${money(s.price)}</div>
+          ${canSeeCost()?`<div class="costline">進價 ${money(s.cost)}</div>
+            <div class="costline" style="color:var(--green)">毛利 ${money(margin)} · ${mpct}%</div>`:''}
+          <div class="mono" style="font-size:13px;margin-top:4px;color:${s.qty===0?'var(--red)':(s.qty<=s.low?'var(--amber)':'var(--ink)')}">
+            庫存 ${s.qty}</div>
+          ${(s.elsewhere&&s.elsewhere.length)?s.elsewhere.map(e=>
+            `<div class="costline" style="color:var(--prussian)">${e.store} 有 ${e.qty} 件</div>`).join(''):''}
+        </div>
+      </div>
+      <div class="btn-row">
+        ${(s.elsewhere&&s.elsewhere.length)?`<button class="btn ghost sm" onclick="openTransfer('${s.no}')">調貨</button>`:''}
+        ${canSeeCost()?`<button class="btn ghost sm" onclick="openEditStyle('${s.no}')">編輯 · 成本</button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ================= POS / REGISTER ================= */
+function findStyle(no){return state.styles.find(s=>String(s.no)===String(no));}
+function findByCode(code){
+  code=(code||'').trim();
+  if(!code)return null;
+  const s=findStyle(code);
+  return s?{style:s}:null;
+}
+
+function addToCart(no,qty){
+  const s=findStyle(no);if(!s)return false;
+  const ex=state.cart.find(c=>c.no===s.no);
+  const inCart=ex?ex.qty:0;
+  if(inCart+qty>s.qty){toast('庫存不足:'+s.name+' 僅剩 '+s.qty);return false;}
+  if(ex)ex.qty+=qty;
+  else state.cart.push({no:s.no,name:s.name,price:s.price,cost:s.cost,qty});
+  renderRegister();return true;
+}
+function scanToCart(){
+  const inp=document.getElementById('regScan');const code=inp.value.trim();inp.value='';
+  const s=findStyle(code);
+  if(!s){toast('查無此商品編號:'+code);inp.focus();return;}
+  if(addToCart(s.no,1))toast('加入 '+s.name);
+  inp.focus();
+}
+function cartQtyStep(no,d){
+  const c=state.cart.find(x=>x.no===no);if(!c)return;
+  if(d>0){const s=findStyle(no);if(c.qty+1>s.qty){toast('已達庫存上限 '+s.qty);return;}}
+  c.qty+=d;if(c.qty<=0)state.cart=state.cart.filter(x=>x.no!==no);
+  renderRegister();
+}
+function cartDel(no){state.cart=state.cart.filter(x=>x.no!==no);renderRegister();}
+function clearCart(confirm){
+  if(confirm && state.cart.length && !window.confirm('清空購物車?'))return;
+  state.cart=[];state.cartMember=null;state.cartDiscount=0;renderRegister();
+}
+function cartSubtotal(){return state.cart.reduce((a,c)=>a+c.price*c.qty,0);}
+function cartTotal(){
+  const sub=cartSubtotal();
+  const memOff=state.cartMember?Math.round(sub*(1-state.cartMember.disc)):0;
+  const afterMem=sub-memOff;
+  const manOff=Math.round(afterMem*(state.cartDiscount||0));
+  return {sub,memOff,manOff,grand:afterMem-manOff};
+}
+
+function renderRegister(){
+  const mb=document.getElementById('memberBanner');
+  if(state.cartMember){
+    const m=state.cartMember;
+    mb.innerHTML=`<div class="mbanner">
+      <div><div class="mn">${m.name} <span class="tier">${m.tier}</span></div>
+        <div class="mmeta">${m.phone} · 累積 ${money(m.spent)}</div></div>
+      <div style="text-align:right"><div class="mdisc">會員價 ${Math.round(m.disc*100)}折</div>
+        <button class="mx" onclick="detachMember()">✕ 取消</button></div>
+    </div>`;
+  } else mb.innerHTML='';
+
+  const cl=document.getElementById('cartList');
+  if(!state.cart.length){cl.innerHTML=`<div class="empty">購物車是空的<br>掃描條碼或手動選品加入</div>`;}
+  else{
+    cl.innerHTML=state.cart.map(c=>`<div class="cartrow">
+      <div class="ci"><div class="cn">${c.name}</div>
+        <div class="cv">${c.no} · ${money(c.price)}</div></div>
+      <div class="qstep">
+        <button onclick="cartQtyStep('${c.no}',-1)">−</button>
+        <span class="qn">${c.qty}</span>
+        <button onclick="cartQtyStep('${c.no}',1)">＋</button>
+      </div>
+      <div class="cp">${(c.price*c.qty).toLocaleString()}</div>
+      <button class="del" onclick="cartDel('${c.no}')">✕</button>
+    </div>`).join('');
+  }
+
+  const t=cartTotal();
+  const tt=document.getElementById('cartTotals');
+  if(!state.cart.length){tt.innerHTML='';}
+  else{
+    let rows=`<div class="tr"><span>小計</span><span>${money(t.sub)}</span></div>`;
+    if(t.memOff)rows+=`<div class="tr"><span class="disc">會員折扣</span><span class="disc">−${t.memOff.toLocaleString()}</span></div>`;
+    if(t.manOff)rows+=`<div class="tr"><span class="disc">折扣 ${Math.round(state.cartDiscount*100)}%</span><span class="disc">−${t.manOff.toLocaleString()}</span></div>`;
+    rows+=`<div class="tr grand"><span>應收</span><span>${money(t.grand)}</span></div>`;
+    tt.innerHTML=rows;
+  }
+  const cb=document.getElementById('checkoutBtn');
+  if(cb)cb.style.opacity=state.cart.length?'1':'.4';
+}
+
+function openPickItem(){
+  const opts=state.styles.map(s=>`<option value="${s.no}">${s.no} ${s.name}</option>`).join('');
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>手動選品</h3><div class="sub">選商品加入購物車</div>
+    <label class="fld">商品</label><select class="f" id="pk_no">${opts}</select>
+    <label class="fld">數量</label><input class="f" id="pk_qty" type="number" value="1" inputmode="numeric">
+    <button class="btn green" style="margin-top:16px" onclick="doPickItem()">加入購物車</button>`);
+}
+function doPickItem(){ if(addToCart(val('pk_no'),+val('pk_qty')||1))closeModal(); }
+
+function openMemberAttach(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>帶入會員</h3><div class="sub">輸入電話查詢,套用會員專屬折扣價</div>
+    <label class="fld">電話號碼</label>
+    <input class="f" id="ma_phone" type="tel" inputmode="numeric" placeholder="09xxxxxxxx" onkeydown="if(event.key==='Enter')doAttachMember()">
+    <button class="btn" style="margin-top:14px" onclick="doAttachMember()">查詢並帶入</button>
+    <div class="hint">查無此號?<button class="btn ghost sm" style="margin-top:8px" onclick="openNewMember(document.getElementById('ma_phone').value)">用這支號碼建新會員</button></div>`);
+  setTimeout(()=>document.getElementById('ma_phone').focus(),100);
+}
+function doAttachMember(){
+  const p=val('ma_phone').replace(/\D/g,'');
+  const m=state.members.find(x=>x.phone===p);
+  if(!m){toast('查無會員,可建新會員');return;}
+  state.cartMember=m;closeModal();renderRegister();toast('已帶入 '+m.name+' · '+Math.round(m.disc*100)+'折');
+}
+function detachMember(){state.cartMember=null;renderRegister();}
+
+function openNewMember(prefill){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>新增會員</h3><div class="sub">電話為唯一識別</div>
+    <label class="fld">電話</label><input class="f" id="nm_phone" type="tel" inputmode="numeric" value="${(prefill||'').replace(/\D/g,'')}">
+    <label class="fld">姓名 / 稱呼</label><input class="f" id="nm_name" placeholder="—">
+    <div class="grid2">
+      <div><label class="fld">等級</label><select class="f" id="nm_tier" onchange="nmTierDisc()"><option>一般</option><option>VIP</option></select></div>
+      <div><label class="fld">折扣(折)</label><input class="f" id="nm_disc" type="number" value="95" inputmode="numeric"></div>
+    </div>
+    <button class="btn green" style="margin-top:16px" onclick="doNewMember()">建立會員</button>
+    <div class="hint">折扣填 95 = 95折。VIP 預設 90 折,可自行調整。</div>`);
+}
+function nmTierDisc(){document.getElementById('nm_disc').value=val('nm_tier')==='VIP'?90:95;}
+function doNewMember(){
+  const phone=val('nm_phone').replace(/\D/g,'');
+  if(phone.length<8){toast('請填正確電話');return;}
+  if(state.members.find(x=>x.phone===phone)){toast('此電話已是會員');return;}
+  const m={phone,name:val('nm_name')||'會員',tier:val('nm_tier'),
+    disc:(+val('nm_disc')||95)/100,spent:0,joined:new Date().toISOString().slice(0,7).replace('-','.')};
+  state.members.push(m);state.cartMember=m;
+  api('upsertMember',{member:m});
+  closeModal();renderRegister();
+  toast('已建立會員 '+m.name);
+}
+
+function renderMembers(){
+  const q=(document.getElementById('memSearch')?.value||'').trim();
+  const list=state.members.filter(m=>!q||m.phone.includes(q)||m.name.includes(q))
+    .sort((a,b)=>b.spent-a.spent);
+  const el=document.getElementById('memberList');
+  if(!list.length){el.innerHTML=`<div class="empty">${q?'查無符合會員':'尚無會員'}</div>`;return;}
+  el.innerHTML=list.map(m=>`<div class="mcard">
+    <div class="row-between">
+      <div><div class="mn" style="font-weight:700">${m.name} <span class="tier">${m.tier}</span></div>
+        <div class="mmeta" style="font-family:'Courier New',monospace;font-size:11px;color:var(--muted);margin-top:2px">
+          ${m.phone} · 入會 ${m.joined}</div></div>
+      <div style="text-align:right">
+        <div class="mono" style="font-size:16px;font-weight:700">NT$${m.spent.toLocaleString()}</div>
+        <div class="mmeta" style="font-size:10px;color:var(--gilt)">${Math.round(m.disc*100)}折</div></div>
+    </div></div>`).join('');
+}
+
+function openCheckout(){
+  if(!state.cart.length){toast('購物車是空的');return;}
+  const t=cartTotal();
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>結帳</h3><div class="sub">應收 NT$${t.grand.toLocaleString()}${state.cartMember?' · '+state.cartMember.name:''}</div>
+    <label class="fld">付款方式</label>
+    <div class="chips" id="co_pay">
+      <div class="chip on" onclick="pick(this,'copay')">現金</div>
+      <div class="chip" onclick="pick(this,'copay')">刷卡</div>
+      <div class="chip" onclick="pick(this,'copay')">轉帳</div>
+      <div class="chip" onclick="pick(this,'copay')">LINE Pay</div>
+    </div>
+    <label class="fld">收現(找零計算,選填)</label>
+    <input class="f" id="co_cash" type="number" inputmode="numeric" placeholder="NT$" oninput="coChange(${t.grand})">
+    <div id="co_change" class="hint"></div>
+    <label class="fld" style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="co_receipt" checked style="width:auto"> 結帳後列印收據</label>
+    <button class="btn green" style="margin-top:14px" onclick="doCheckout(${t.grand})">確認收款 NT$${t.grand.toLocaleString()}</button>`);
+  state.picks.copay='現金';
+}
+function coChange(grand){
+  const cash=+val('co_cash')||0;const el=document.getElementById('co_change');
+  if(cash<=0){el.textContent='';return;}
+  const ch=cash-grand;el.textContent=ch>=0?('找零 NT$'+ch.toLocaleString()):('不足 NT$'+(-ch).toLocaleString());
+  el.style.color=ch>=0?'var(--green)':'var(--red)';
+}
+function doCheckout(grand){
+  const pay=state.picks.copay||'現金';
+  const wantReceipt=document.getElementById('co_receipt').checked;
+  const t=cartTotal();
+  const txnNo='S'+Date.now().toString().slice(-6);
+  const items=state.cart.map(c=>({...c}));
+  state.cart.forEach(c=>{const s=findStyle(c.no);if(s)s.qty-=c.qty;
+    state.sales.push({date:today(),sku:c.no,qty:c.qty,amt:c.price*c.qty,cost:c.cost*c.qty});});
+  if(state.cartMember)state.cartMember.spent+=grand;
+  state.txns=state.txns||[];
+  state.txns.unshift({no:txnNo,time:nowHM(),items,total:grand,pay,member:state.cartMember?state.cartMember.name:null});
+  const mem=state.cartMember;
+  api('checkout',{txn:{no:txnNo,date:today(),time:nowHM(),total:grand,pay,
+    member:mem?mem.name:'',memberPhone:mem?mem.phone:'',items}});
+  closeModal();
+  if(wantReceipt)printReceipt(txnNo,items,t,pay,mem);
+  clearCart(false);
+  toast('結帳完成 '+money(grand));
+}
+
+function printReceipt(no,items,t,pay,mem){
+  const ra=document.getElementById('receiptArea');
+  ra.innerHTML=`<div class="receipt">
+    <div class="rc"><h4>FRCS</h4><div>For Restless City Souls</div><div>Tainan</div></div>
+    <div class="rline"></div>
+    <div>單號 ${no}</div><div>${new Date().toLocaleString('zh-TW')}</div>
+    ${mem?`<div>會員 ${mem.name}</div>`:''}
+    <div class="rline"></div>
+    ${items.map(c=>`<div class="ri"><span>${c.name} ×${c.qty}</span><span>${(c.price*c.qty).toLocaleString()}</span></div>`).join('')}
+    <div class="rline"></div>
+    <div class="ri"><span>小計</span><span>${t.sub.toLocaleString()}</span></div>
+    ${t.memOff?`<div class="ri"><span>會員折扣</span><span>-${t.memOff.toLocaleString()}</span></div>`:''}
+    ${t.manOff?`<div class="ri"><span>折扣</span><span>-${t.manOff.toLocaleString()}</span></div>`:''}
+    <div class="rtot"><span>應收</span><span>${money(t.grand)}</span></div>
+    <div class="ri"><span>付款</span><span>${pay}</span></div>
+    <div class="rline"></div>
+    <div class="rc">謝謝惠顧 · FRCS</div>
+  </div>`;
+  setTimeout(()=>window.print(),300);
+}
+
+function openPreFromCart(){
+  if(!state.cart.length){toast('購物車是空的');return;}
+  if(state.cart.length>1){toast('預購單一次一件,請只留一項');return;}
+  const c=state.cart[0];
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>轉為預購單</h3><div class="sub">${c.name} ×${c.qty}</div>
+    <div class="grid2">
+      <div><label class="fld">單價</label><input class="f" id="pf_price" type="number" value="${c.price}" inputmode="numeric"></div>
+      <div><label class="fld">訂金</label><input class="f" id="pf_dep" type="number" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <label class="fld">客戶</label>
+    <input class="f" id="pf_cust" value="${state.cartMember?state.cartMember.name:''}" placeholder="姓名或電話">
+    <button class="btn gilt" style="margin-top:16px" onclick="doPreFromCart()">建立預購單並收訂金</button>
+    <div class="hint">預購不扣現貨庫存,走「收訂金→到貨→出貨→收尾款」流程。</div>`);
+}
+function doPreFromCart(){
+  const c=state.cart[0];const no="PO-"+Math.floor(1000+Math.random()*9000);
+  const dep=+val('pf_dep')||0;
+  const po={no,sku:c.no,qty:c.qty,price:+val('pf_price')||c.price,
+    deposit:dep,stage:"收訂金",cust:val('pf_cust')||'—',createdAt:today()};
+  state.preorders.push(po);
+  api('upsertPreorder',{preorder:po});
+  if(dep){const sale={date:today(),sku:c.no,qty:0,amt:dep,cost:0,note:'訂金'};
+    state.sales.push(sale);api('preorderFinal',{preorder:po,sale});}
+  closeModal();clearCart(false);toast('已建立預購單 '+no+(dep?' · 訂金 '+money(dep):''));
+}
+
+function openDiscount(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>整單折扣</h3><div class="sub">在會員折扣之後再打折</div>
+    <div class="chips">
+      ${[0,5,10,15,20].map(p=>`<div class="chip ${state.cartDiscount*100===p?'on':''}" onclick="setDiscount(${p})">${p?p+'%':'無'}</div>`).join('')}
+    </div>
+    <label class="fld">自訂折扣 %</label>
+    <input class="f" id="dc_val" type="number" inputmode="numeric" value="${Math.round(state.cartDiscount*100)}">
+    <button class="btn" style="margin-top:14px" onclick="setDiscount(+val('dc_val')||0)">套用</button>`);
+}
+function setDiscount(p){state.cartDiscount=Math.max(0,Math.min(100,p))/100;closeModal();renderRegister();toast(p?('折扣 '+p+'%'):'已取消折扣');}
+
+function renderTxns(){
+  const txns=state.txns||[];
+  const total=txns.reduce((a,t)=>a+t.total,0);
+  const cost=txns.reduce((a,t)=>a+t.items.reduce((x,i)=>x+i.cost*i.qty,0),0);
+  let kpi=`<div class="cell"><div class="lab">今日筆數</div><div class="val">${txns.length}</div></div>
+    <div class="cell"><div class="lab">今日營收</div><div class="val">${money(total)}</div></div>`;
+  if(canSeeCost())kpi+=`<div class="cell"><div class="lab">成本</div><div class="val">${money(cost)}</div></div>
+    <div class="cell"><div class="lab">毛利</div><div class="val pos">${money(total-cost)}</div></div>`;
+  document.getElementById('txnSummary').innerHTML=`<div class="kpi">${kpi}</div>`;
+  const el=document.getElementById('txnList');
+  if(!txns.length){el.innerHTML=`<div class="empty">今天還沒有交易</div>`;return;}
+  el.innerHTML=txns.map(t=>`<div class="card">
+    <div class="row-between">
+      <div style="flex:1;min-width:0"><div class="style-no">${t.no} · ${t.time}${t.member?' · '+t.member:''}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">${t.items.map(i=>i.name+'×'+i.qty).join('、')}</div></div>
+      <div style="text-align:right"><div class="mono" style="font-size:16px;font-weight:700">${money(t.total)}</div>
+        <div class="style-meta">${t.pay}</div></div>
+    </div></div>`).join('');
+}
+function nowHM(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+
+/* ================= OPS: 預購追蹤 (店員可用) ================= */
+function renderPreTrack(){
+  state.preFilter=state.preFilter||'全部';
+  document.getElementById('preFilter').innerHTML=['全部',...PRE_STAGES].map(o=>
+    `<div class="fchip ${state.preFilter===o?'on':''}" onclick="setPreFilter('${o}')">${o}</div>`).join('');
+  const list=state.preorders.filter(p=>state.preFilter==='全部'||p.stage===state.preFilter);
+  const el=document.getElementById('preTrackList');
+  if(!list.length){el.innerHTML=`<div class="empty">${state.preFilter==='全部'?'目前沒有預購單':'此階段沒有預購單'}</div>`;return;}
+  el.innerHTML=list.map(p=>{
+    const idx=PRE_STAGES.indexOf(p.stage);
+    const s=findStyle(p.sku);
+    const bal=p.price*p.qty-p.deposit;
+    const next=idx<PRE_STAGES.length-1?PRE_STAGES[idx+1]:null;
+    const done=idx>=PRE_STAGES.length-1;
+    const track=PRE_STAGES.map((st,i)=>
+      `<span class="tag ${i<=idx?'pre':''}" style="${i<=idx?'':'opacity:.3'}">${st}</span>`).join(' ');
+    return `<div class="card ${done?'done':'pending'}">
+      <div class="style-head">
+        <div style="flex:1;min-width:0">
+          <div class="style-no">${p.no} · ${p.sku}</div>
+          <div class="style-name" style="font-size:14px">${s?s.name:p.sku}</div>
+          <div class="style-meta">×${p.qty} · ${p.cust}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="mono" style="font-size:15px;font-weight:700">${money(p.price*p.qty)}</div>
+          <div class="style-meta">訂金 ${p.deposit.toLocaleString()}</div>
+          ${bal>0?`<div class="style-meta" style="color:var(--amber)">尾款 ${bal.toLocaleString()}</div>`:''}
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:5px">${track}</div>
+      ${next
+        ? `<button class="btn sm ${next==='已收尾款'?'green':'gilt'}" style="margin-top:10px" onclick="advancePreTrack('${p.no}')">
+             ${next==='已收尾款'?`✓ 客人取貨 · 收尾款 ${money(bal)}`:'推進 → '+next}</button>`
+        : `<div class="hint" style="margin-top:10px;color:var(--green)">✓ 已完成</div>`}
+    </div>`;
+  }).join('');
+}
+function setPreFilter(f){state.preFilter=f;renderPreTrack();}
+function advancePreTrack(no){
+  const p=state.preorders.find(x=>x.no===no);if(!p)return;
+  const idx=PRE_STAGES.indexOf(p.stage);
+  if(idx>=PRE_STAGES.length-1)return;
+  const next=PRE_STAGES[idx+1];
+  if(next==='已收尾款'){
+    const bal=p.price*p.qty-p.deposit;
+    if(!window.confirm(`確認客人已取貨並收到尾款 ${money(bal)}?`))return;
+    p.stage=next;
+    const st=findStyle(p.sku);
+    state.sales.push({date:today(),sku:p.sku,qty:p.qty,amt:bal,cost:(st?st.cost:0)*p.qty,note:'尾款'});
+    state.txns=state.txns||[];
+    state.txns.unshift({no:'PO'+p.no.slice(-4),time:nowHM(),
+      items:[{no:p.sku,name:st?st.name:p.sku,qty:p.qty,price:bal,cost:st?st.cost:0}],
+      total:bal,pay:'預購尾款',member:p.cust});
+    toast('尾款 '+money(bal)+' 入帳');
+  } else { p.stage=next;toast(p.no+' → '+next); }
+  renderPreTrack();
+}
+
+/* ---------------- labels ---------------- */
+function renderLabels(){
+  const el=document.getElementById('lblPickList');
+  el.innerHTML=state.styles.map(s=>`<label class="lblpick">
+    <input type="checkbox" class="lblchk" data-no="${s.no}" ${s.qty>0?'checked':''}>
+    <span style="flex:1">${s.name}</span>
+    <span style="color:var(--muted)">${s.no}</span>
+    <span style="width:34px;text-align:right">×${s.qty}</span>
+  </label>`).join('');
+}
+function lblAll(on){document.querySelectorAll('.lblchk').forEach(c=>c.checked=on);}
+function printLabels(){
+  const picks=[...document.querySelectorAll('.lblchk:checked')];
+  if(!picks.length){toast('請至少勾選一項');return;}
+  const area=document.getElementById('printArea');
+  area.innerHTML='<div class="lblgrid">'+picks.map(chk=>{
+    const s=findStyle(chk.getAttribute('data-no'));
+    return `<div class="lblcard">
+      <div class="lname">${s.name}</div>
+      <div class="ln">${s.gender}${s.cat}</div>
+      <svg class="bc" data-code="${s.no}"></svg>
+      <div class="ln">${money(s.price)}</div>
+    </div>`;
+  }).join('')+'</div>';
+  area.querySelectorAll('svg.bc').forEach(svg=>{
+    try{ JsBarcode(svg,svg.getAttribute('data-code'),
+      {format:"CODE128",width:1.6,height:40,fontSize:12,margin:2,displayValue:true}); }
+    catch(e){ svg.outerHTML='<div class="ln">'+svg.getAttribute('data-code')+'</div>'; }
+  });
+  toast('已生成 '+picks.length+' 張標籤');
+  setTimeout(()=>window.print(),400);
+}
+
+/* ---------------- 入庫 / 盤點 / 叫貨 ---------------- */
+function renderIntake(){
+  const el=document.getElementById('intakeRecent');
+  const r=(state.intakeLog||[]).slice(0,8);
+  el.innerHTML=r.length?r.map(i=>`<div class="card">
+    <div class="row-between"><div><div class="style-no">${i.time} · ${i.no}</div>
+      <div style="font-weight:700;font-size:13px">${i.name}</div></div>
+      <div class="mono" style="color:var(--green);font-size:16px">+${i.qty}</div></div></div>`).join('')
+    :`<div class="empty" style="padding:20px 0">今天還沒有入庫紀錄</div>`;
+}
+function scanIntake(){
+  const inp=document.getElementById('ikScan');const s=findStyle(inp.value.trim());inp.value='';
+  if(!s){toast('查無此商品編號');inp.focus();return;}
+  document.getElementById('ik_no').value=s.no;
+  toast('已帶入 '+s.name);inp.focus();
+}
+function doIntake(){
+  const s=findStyle(val('ik_no'));if(!s){toast('請選商品');return;}
+  const q=+val('ik_qty')||0;
+  if(q<=0){toast('請填數量');return;}
+  s.qty+=q;
+  state.intakeLog=state.intakeLog||[];
+  state.intakeLog.unshift({time:nowHM(),no:s.no,name:s.name,qty:q});
+  api('intake',{sku:s.no,qty:q,name:s.name,date:today(),time:nowHM()});
+  document.getElementById('ik_qty').value='1';
+  renderIntake();toast('入庫 '+s.name+' +'+q);
+}
+function fillIntakeSelect(){
+  const sel=document.getElementById('ik_no');
+  if(sel)sel.innerHTML=state.styles.map(s=>`<option value="${s.no}">${s.no} ${s.name}</option>`).join('');
+  renderIntake();
+}
+
+function renderCount(){
+  const el=document.getElementById('countList');
+  el.innerHTML=state.styles.map(s=>`<div class="cntrow">
+    <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">${s.name}</div>
+      <div class="style-no">${s.no} · 帳面 ${s.qty}</div></div>
+    <input class="f" style="width:70px;padding:7px;text-align:center" type="number" inputmode="numeric"
+      data-no="${s.no}" value="${s.qty}">
+  </div>`).join('');
+}
+function saveCount(){
+  let diff=0,changed=0;const counts=[];
+  document.querySelectorAll('#countList input[data-no]').forEach(inp=>{
+    const s=findStyle(inp.getAttribute('data-no'));const v=+inp.value||0;
+    if(v!==s.qty){diff+=Math.abs(v-s.qty);changed++;s.qty=v;counts.push({no:s.no,qty:v});}
+  });
+  if(counts.length)api('stocktake',{counts});
+  toast(changed?('盤點完成,'+changed+' 項調整 '+diff+' 件'):'盤點完成,無差異');
+  renderCount();
+}
+
+function renderLow(){
+  const el=document.getElementById('lowList');
+  const items=state.styles.filter(s=>s.qty<=s.low);
+  if(!items.length){el.innerHTML=`<div class="empty">庫存充足</div>`;return;}
+  el.innerHTML=items.map(s=>`<div class="card ${s.qty===0?'':'pending'}">
+    <div class="row-between">
+      <div style="flex:1;min-width:0"><div class="style-no">${s.no}</div>
+        <div style="font-weight:700;font-size:14px">${s.name}</div>
+        <div class="style-meta">${s.gender}${s.cat}</div></div>
+      <div style="text-align:right"><div class="mono" style="font-size:20px;color:${s.qty===0?'var(--red)':'var(--amber)'}">${s.qty}</div>
+        <div class="style-meta">安全量 ${s.low}</div></div>
+    </div></div>`).join('');
+}
+function copyRestock(){
+  const lines=['【FRCS 叫貨清單】'+today()];
+  state.styles.filter(s=>s.qty<=s.low).forEach(s=>
+    lines.push(`${s.no} ${s.name} — 剩 ${s.qty}`));
+  navigator.clipboard?.writeText(lines.join('\n'));
+  toast('叫貨清單已複製');
+}
+
+/* ---------------- 商品編輯(僅老闆) ---------------- */
+function openEditStyle(no){
+  const s=findStyle(no);if(!s)return;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>編輯商品</h3><div class="sub">${s.no}</div>
+    <label class="fld">品名</label><input class="f" id="es_name" value="${s.name}">
+    <div class="grid2">
+      <div><label class="fld">進價 NT$</label><input class="f" id="es_cost" type="number" value="${s.cost}" inputmode="numeric"></div>
+      <div><label class="fld">售價 NT$</label><input class="f" id="es_price" type="number" value="${s.price}" inputmode="numeric"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">性別線</label><select class="f" id="es_gender">${state.genders.map(g=>`<option ${g===s.gender?'selected':''}>${g}</option>`).join('')}</select></div>
+      <div><label class="fld">品類</label><select class="f" id="es_cat">${state.cats.map(c=>`<option ${c===s.cat?'selected':''}>${c}</option>`).join('')}</select></div>
+    </div>
+    <label class="fld">安全庫存量</label><input class="f" id="es_low" type="number" value="${s.low}" inputmode="numeric">
+    <button class="btn" style="margin-top:16px" onclick="doEditStyle('${no}')">儲存</button>`);
+}
+function doEditStyle(no){
+  const s=findStyle(no);
+  s.name=val('es_name')||s.name;
+  s.cost=+val('es_cost')||0; s.price=+val('es_price')||0;
+  s.gender=val('es_gender'); s.cat=val('es_cat'); s.low=+val('es_low')||1;
+  api('upsertItem',{item:{no:s.no,name:s.name,cat:s.cat,gender:s.gender,cost:s.cost,price:s.price,low:s.low}});
+  closeModal();renderStyles();toast('已更新 '+s.name);
+}
+function openNewStyle(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>新增商品</h3><div class="sub">商品編號為唯一識別,即為條碼</div>
+    <label class="fld">商品編號</label><input class="f" id="ns_no" inputmode="numeric" placeholder="21501">
+    <label class="fld">品名</label><input class="f" id="ns_name" placeholder="顏染造型衫-黑">
+    <div class="grid2">
+      <div><label class="fld">進價 NT$</label><input class="f" id="ns_cost" type="number" inputmode="numeric"></div>
+      <div><label class="fld">售價 NT$</label><input class="f" id="ns_price" type="number" inputmode="numeric"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">性別線</label><select class="f" id="ns_gender">${state.genders.map(g=>`<option>${g}</option>`).join('')}</select></div>
+      <div><label class="fld">品類</label><select class="f" id="ns_cat">${state.cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">初始庫存</label><input class="f" id="ns_qty" type="number" value="0" inputmode="numeric"></div>
+      <div><label class="fld">安全量</label><input class="f" id="ns_low" type="number" value="1" inputmode="numeric"></div>
+    </div>
+    <button class="btn green" style="margin-top:16px" onclick="doNewStyle()">建立商品</button>`);
+}
+function doNewStyle(){
+  const no=val('ns_no').trim();
+  if(!no){toast('請填商品編號');return;}
+  if(findStyle(no)){toast('此編號已存在');return;}
+  const rec={no,name:val('ns_name')||'未命名',cat:val('ns_cat'),gender:val('ns_gender'),
+    cost:+val('ns_cost')||0,price:+val('ns_price')||0,qty:+val('ns_qty')||0,low:+val('ns_low')||1};
+  state.styles.push(rec);
+  api('upsertItem',{item:rec});
+  closeModal();renderStyles();toast('已建立商品');
+}
+
+/* ---------------- CSV 匯入 ---------------- */
+function openImport(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>匯入商品 CSV</h3>
+    <div class="sub">欄位順序:商品編號, 商品名稱, 商品類別, 進價, 售價, 庫存</div>
+    <textarea class="f" id="imp_csv" rows="8" placeholder="21497,顏染造型衫-淺灰,男上衣,520,1480,3"></textarea>
+    <button class="btn" style="margin-top:14px" onclick="doImport()">匯入</button>
+    <div class="hint">「男上衣」會自動拆成 性別線=男、品類=上衣。可直接從 Google Sheets 複製貼上。</div>`);
+}
+function parseCat(raw){
+  raw=(raw||'').trim();
+  let gender=state.genders.find(g=>raw.startsWith(g))||'男';
+  let rest=raw.replace(gender,'');
+  const map={'上衣':'上衣','下身':'下身','下半身':'下身','外套':'外套'};
+  return {gender, cat:map[rest]||'上衣'};
+}
+function doImport(){
+  const raw=document.getElementById('imp_csv').value.trim();
+  if(!raw){toast('請貼上 CSV');return;}
+  let added=0,updated=0,skipped=0;
+  raw.split(/\r?\n/).forEach(line=>{
+    const p=line.split(',').map(x=>x.trim());
+    if(p.length<3||!p[0]||isNaN(+p[0])){skipped++;return;}
+    const {gender,cat}=parseCat(p[2]);
+    const rec={no:p[0],name:p[1]||'未命名',cat,gender,
+      cost:+p[3]||0,price:+p[4]||0,qty:+p[5]||0,low:1};
+    const ex=findStyle(rec.no);
+    if(ex){Object.assign(ex,rec);updated++;}
+    else{state.styles.push(rec);added++;}
+  });
+  api('bulkUpsertItems',{items:state.styles.map(x=>({no:x.no,name:x.name,cat:x.cat,
+    gender:x.gender,cost:x.cost,price:x.price,qty:x.qty,low:x.low}))});
+  closeModal();renderStyles();
+  toast(`新增 ${added} · 更新 ${updated}${skipped?' · 略過 '+skipped:''}`);
+}
+
+/* ================= 採購 PURCHASE ORDERS ================= */
+function renderPurchase(){
+  state.poFilter=state.poFilter||'全部';
+  document.getElementById('poFilter').innerHTML=['全部',...PO_STAGES].map(o=>
+    `<div class="fchip ${state.poFilter===o?'on':''}" onclick="setPoFilter('${o}')">${o}</div>`).join('');
+  const list=state.purchases.filter(p=>state.poFilter==='全部'||p.stage===state.poFilter);
+  const el=document.getElementById('poList');
+  if(!list.length){el.innerHTML=`<div class="empty">${state.poFilter==='全部'?'目前沒有採購單':'此階段沒有採購單'}</div>`;return;}
+  el.innerHTML=list.map(p=>{
+    const t=poTotals(p);
+    const idx=PO_STAGES.indexOf(p.stage);
+    const next=idx<PO_STAGES.length-1?PO_STAGES[idx+1]:null;
+    const received=p.stage==='已入倉';
+    const track=PO_STAGES.map((st,i)=>
+      `<span class="tag ${i<=idx?'pre':''}" style="${i<=idx?'':'opacity:.3'}">${st}</span>`).join(' ');
+    const items=p.items.map(i=>
+      `<div class="porow">
+        <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12px">${i.name}</div>
+          <div class="style-no">${i.no} · ${i.gender}${i.cat}</div></div>
+        <div class="mono" style="font-size:11px;text-align:right">
+          <div>${p.currency} ${i.unitFx.toLocaleString()} ×${i.qty}</div>
+          <div style="color:var(--gilt)">單件成本 ${money(poUnitCost(p,i))}</div>
+        </div>
+      </div>`).join('');
+    return `<div class="card ${received?'done':'pending'}">
+      <div class="style-head">
+        <div style="flex:1;min-width:0">
+          <div class="style-no">${p.no}</div>
+          <div class="style-name" style="font-size:14px">${p.vendor}</div>
+          <div class="style-meta">下單 ${p.ordered} · 預計 ${p.eta} · ${t.units} 件</div>
+        </div>
+        <div style="text-align:right">
+          <div class="mono" style="font-size:15px;font-weight:700">${money(t.total)}</div>
+          <div class="costline">貨款 ${money(t.goods)}</div>
+          <div class="costline">運費關稅 ${money(t.extra)}</div>
+          <div class="costline" style="color:var(--gilt)">每件攤 ${money(t.perUnitExtra)}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:5px">${track}</div>
+      <div class="poitems">${items}</div>
+      <div class="btn-row" style="margin-top:8px">
+        ${!received?`<button class="btn ghost sm" onclick="openEditPO('${p.no}')">編輯</button>`:''}
+        ${next
+          ? (next==='已入倉'
+              ? `<button class="btn green sm" onclick="receivePO('${p.no}')">✓ 入倉 · 建檔並加庫存</button>`
+              : `<button class="btn gilt sm" onclick="advancePO('${p.no}')">推進 → ${next}</button>`)
+          : `<div class="hint" style="color:var(--green)">✓ 已入倉,商品已上架</div>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+function setPoFilter(f){state.poFilter=f;renderPurchase();}
+function advancePO(no){
+  const p=state.purchases.find(x=>x.no===no);if(!p)return;
+  const idx=PO_STAGES.indexOf(p.stage);
+  if(idx>=PO_STAGES.length-1)return;
+  p.stage=PO_STAGES[idx+1];
+  api('upsertPurchase',{purchase:p});
+  if(p.stage==='已付款'){
+    const t=poTotals(p);
+    const tp={no:'TP-'+p.no,who:p.vendor,amt:Math.round(t.total),cat:'進貨貨款'};
+    state.topay.push(tp);
+    api('addTopay',{topay:tp});
+    toast('已付款 · 已加入待匯款 '+money(t.total));
+  } else toast(p.no+' → '+p.stage);
+  renderPurchase();
+}
+function receivePO(no){
+  const p=state.purchases.find(x=>x.no===no);if(!p)return;
+  const t=poTotals(p);
+  if(!window.confirm(`入倉 ${p.no}?\n${t.units} 件商品將建檔並加入庫存,成本含運費關稅攤提。`))return;
+  let created=0,updated=0;
+  p.items.forEach(i=>{
+    const cost=Math.round(poUnitCost(p,i));
+    const ex=findStyle(i.no);
+    if(ex){ ex.qty+=i.qty; ex.cost=cost; updated++; }
+    else{
+      state.styles.push({no:i.no,name:i.name,cat:i.cat,gender:i.gender,
+        cost, price:i.price||Math.round(cost*2.8/10)*10, qty:i.qty, low:1});
+      created++;
+    }
+  });
+  p.stage='已入倉';
+  p.receivedAt=today();
+  api('receivePurchase',{purchase:p, items:p.items.map(i=>{
+    const st=findStyle(i.no);
+    return {no:i.no,name:i.name,cat:i.cat,gender:i.gender,
+      cost:Math.round(poUnitCost(p,i)), price:st?st.price:(i.price||0), qty:i.qty};
+  })});
+  toast(`入倉完成 · 新建 ${created} · 補貨 ${updated}`);
+  renderPurchase();
+  setTimeout(()=>{
+    if(window.confirm('要現在列印這批商品的標籤嗎?')){
+      setMode('stock');
+      showView('v-labels','labels');
+      setTimeout(()=>{
+        document.querySelectorAll('.lblchk').forEach(c=>
+          c.checked=p.items.some(i=>i.no===c.getAttribute('data-no')));
+        toast('已勾選這批 '+p.items.length+' 項');
+      },100);
+    }
+  },600);
+}
+
+function openNewPO(){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>新採購單</h3><div class="sub">建立後可逐項加入商品</div>
+    <label class="fld">採購單號</label><input class="f" id="po_no" placeholder="PO26-05">
+    <label class="fld">廠商</label><input class="f" id="po_vendor" placeholder="Seoul / 東大門 A">
+    <div class="grid2">
+      <div><label class="fld">幣別</label><select class="f" id="po_cur"><option>KRW</option><option>USD</option><option>TWD</option></select></div>
+      <div><label class="fld">匯率</label><input class="f" id="po_rate" type="number" step="0.0001" value="0.0235" inputmode="decimal"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">運費 NT$</label><input class="f" id="po_freight" type="number" inputmode="numeric" placeholder="0"></div>
+      <div><label class="fld">關稅 NT$</label><input class="f" id="po_duty" type="number" inputmode="numeric" placeholder="0"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">下單日</label><input class="f" id="po_ordered" type="date"></div>
+      <div><label class="fld">預計到貨</label><input class="f" id="po_eta" type="date"></div>
+    </div>
+    <button class="btn" style="margin-top:14px" onclick="doNewPO()">建立採購單</button>
+    <div class="hint">KRW 參考匯率約 0.0235(1 韓元 ≈ 0.0235 台幣),請依實際匯率填寫。</div>`);
+}
+function doNewPO(){
+  const no=val('po_no').trim();
+  if(!no){toast('請填單號');return;}
+  if(state.purchases.find(x=>x.no===no)){toast('此單號已存在');return;}
+  const po={no,vendor:val('po_vendor')||'—',currency:val('po_cur'),
+    rate:+val('po_rate')||1,freight:+val('po_freight')||0,duty:+val('po_duty')||0,
+    stage:'已訂購',ordered:val('po_ordered')||today(),eta:val('po_eta')||'—',items:[]};
+  state.purchases.unshift(po);
+  api('upsertPurchase',{purchase:po});
+  closeModal();renderPurchase();toast('已建立 '+no+',請加入商品');
+}
+
+function openEditPO(no){
+  const p=state.purchases.find(x=>x.no===no);if(!p)return;
+  const rows=p.items.map((i,idx)=>`<div class="porow">
+    <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12px">${i.name}</div>
+      <div class="style-no">${i.no} · ${p.currency} ${i.unitFx.toLocaleString()} ×${i.qty}</div></div>
+    <button class="del" onclick="delPOItem('${no}',${idx})">✕</button>
+  </div>`).join('')||`<div class="empty" style="padding:14px 0">還沒有商品</div>`;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>${p.no} · ${p.vendor}</h3><div class="sub">${p.stage}</div>
+    <div class="grid2">
+      <div><label class="fld">運費 NT$</label><input class="f" id="ep_freight" type="number" value="${p.freight}" inputmode="numeric"></div>
+      <div><label class="fld">關稅 NT$</label><input class="f" id="ep_duty" type="number" value="${p.duty}" inputmode="numeric"></div>
+    </div>
+    <label class="fld">匯率</label><input class="f" id="ep_rate" type="number" step="0.0001" value="${p.rate}" inputmode="decimal">
+    <button class="btn ghost sm" style="margin-top:10px" onclick="savePOMeta('${no}')">儲存單頭</button>
+
+    <h2 class="sec" style="margin-top:18px">商品明細</h2>
+    ${rows}
+    <button class="btn ghost sm" style="margin-top:8px" onclick="openAddPOItem('${no}')">＋ 加入商品</button>
+    <button class="btn ghost sm" onclick="openImportPO('${no}')">從 CSV 匯入明細</button>`);
+}
+function savePOMeta(no){
+  const p=state.purchases.find(x=>x.no===no);
+  p.freight=+val('ep_freight')||0; p.duty=+val('ep_duty')||0; p.rate=+val('ep_rate')||p.rate;
+  api('upsertPurchase',{purchase:p});
+  closeModal();renderPurchase();toast('已更新');
+}
+function delPOItem(no,idx){
+  const p=state.purchases.find(x=>x.no===no);
+  p.items.splice(idx,1);api('upsertPurchase',{purchase:p});openEditPO(no);renderPurchase();
+}
+function openAddPOItem(no){
+  const p=state.purchases.find(x=>x.no===no);
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>加入商品 · ${p.no}</h3><div class="sub">新品或補既有商品皆可</div>
+    <label class="fld">商品編號</label><input class="f" id="ai_no" inputmode="numeric" placeholder="21503">
+    <label class="fld">品名</label><input class="f" id="ai_name" placeholder="顏染造型衫-灰">
+    <div class="grid2">
+      <div><label class="fld">性別線</label><select class="f" id="ai_gender">${state.genders.map(g=>`<option>${g}</option>`).join('')}</select></div>
+      <div><label class="fld">品類</label><select class="f" id="ai_cat">${state.cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">單價 ${p.currency}</label><input class="f" id="ai_fx" type="number" inputmode="numeric"></div>
+      <div><label class="fld">數量</label><input class="f" id="ai_qty" type="number" value="1" inputmode="numeric"></div>
+    </div>
+    <label class="fld">售價 NT$(可留空,自動抓 2.8 倍)</label><input class="f" id="ai_price" type="number" inputmode="numeric">
+    <button class="btn green" style="margin-top:14px" onclick="doAddPOItem('${no}')">加入</button>`);
+}
+function doAddPOItem(no){
+  const p=state.purchases.find(x=>x.no===no);
+  const n=val('ai_no').trim();
+  if(!n){toast('請填商品編號');return;}
+  p.items.push({no:n,name:val('ai_name')||'未命名',cat:val('ai_cat'),gender:val('ai_gender'),
+    unitFx:+val('ai_fx')||0,qty:+val('ai_qty')||1,price:+val('ai_price')||0});
+  api('upsertPurchase',{purchase:p});
+  openEditPO(no);renderPurchase();toast('已加入');
+}
+function openImportPO(no){
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>匯入採購明細</h3>
+    <div class="sub">欄位:商品編號, 品名, 類別, 單價(原幣), 數量</div>
+    <textarea class="f" id="ipo_csv" rows="8" placeholder="21501,顏染造型衫-黑,男上衣,22000,4"></textarea>
+    <button class="btn" style="margin-top:12px" onclick="doImportPO('${no}')">匯入</button>
+    <div class="hint">單價填原幣(如韓元 22000),系統會依匯率換算並攤提運費關稅。</div>`);
+}
+function doImportPO(no){
+  const p=state.purchases.find(x=>x.no===no);
+  const raw=document.getElementById('ipo_csv').value.trim();
+  if(!raw){toast('請貼上 CSV');return;}
+  let added=0,skipped=0;
+  raw.split(/\r?\n/).forEach(line=>{
+    const c=line.split(',').map(x=>x.trim());
+    if(c.length<3||!c[0]||isNaN(+c[0])){skipped++;return;}
+    const {gender,cat}=parseCat(c[2]);
+    p.items.push({no:c[0],name:c[1]||'未命名',cat,gender,unitFx:+c[3]||0,qty:+c[4]||1,price:0});
+    added++;
+  });
+  api('upsertPurchase',{purchase:p});
+  closeModal();renderPurchase();
+  toast(`已匯入 ${added} 項${skipped?' · 略過 '+skipped:''}`);
+}
+
+/* ---------------- 調貨 ---------------- */
+function openTransfer(no){
+  const s=findStyle(no);if(!s||!s.elsewhere||!s.elsewhere.length)return;
+  const opts=s.elsewhere.map(e=>`<option value="${e.store}">${e.store}(有 ${e.qty} 件)</option>`).join('');
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>調貨</h3><div class="sub">${s.name} · ${s.no}</div>
+    <label class="fld">從哪間店調</label>
+    <select class="f" id="tr_from">${opts}</select>
+    <label class="fld">調來 ${state.store} 幾件</label>
+    <input class="f" id="tr_qty" type="number" value="1" inputmode="numeric">
+    <label class="fld">備註</label>
+    <input class="f" id="tr_note" placeholder="客人指定 / 補貨 …">
+    <button class="btn green" style="margin-top:14px" onclick="doTransfer('${no}')">確認調貨</button>
+    <div class="hint">調貨會同時扣掉來源店庫存、加到本店。兩邊都看得到這筆紀錄。</div>`);
+}
+async function doTransfer(no){
+  const s=findStyle(no);
+  const from=val('tr_from'), q=+val('tr_qty')||0;
+  const src=s.elsewhere.find(e=>e.store===from);
+  if(!src||q<=0){toast('數量錯誤');return;}
+  if(q>src.qty){toast(from+' 僅剩 '+src.qty+' 件');return;}
+  const r=await api('transfer',{fromStore:from,toStore:state.store,sku:s.no,
+    name:s.name,qty:q,date:today(),note:val('tr_note')||''});
+  if(r.ok===false && !r.queued){toast('調貨失敗:'+r.error);return;}
+  s.qty+=q; src.qty-=q;
+  if(src.qty<=0)s.elsewhere=s.elsewhere.filter(e=>e.store!==from);
+  closeModal();renderStyles();toast(`已從 ${from} 調來 ${q} 件`);
+}
+
+/* ---------------- 報表 ---------------- */
+function renderReport(){
+  document.getElementById('repMonth').textContent=new Date().toISOString().slice(0,7);
+  const rev=state.sales.reduce((a,b)=>a+b.amt,0);
+  const cogs=state.sales.reduce((a,b)=>a+(b.cost||0),0);
+  const exp=state.expenses.reduce((a,b)=>a+b.amt,0);
+  const gross=rev-cogs;
+  const net=gross-exp;
+  document.getElementById('repRev').textContent=money(rev);
+  document.getElementById('repCogs').textContent=money(cogs);
+  document.getElementById('repExp').textContent=money(exp);
+  const g=document.getElementById('repGross');
+  g.textContent=money(gross); g.className='val '+(gross>=0?'pos':'neg');
+  const n=document.getElementById('repNet');
+  if(n){n.textContent=money(net); n.className='val '+(net>=0?'pos':'neg');}
+
+  const map={};state.styles.forEach(x=>map[x.no]=x);
+  const mix={};
+  state.sales.forEach(sl=>{
+    const st=map[sl.sku];if(!st)return;
+    const gk='線·'+st.gender, ck='類·'+st.cat;
+    mix[gk]=(mix[gk]||0)+sl.amt; mix[ck]=(mix[ck]||0)+sl.amt;
+  });
+  const mixMax=Math.max(...Object.values(mix),1);
+  document.getElementById('mixBars').innerHTML=Object.entries(mix)
+    .sort((a,b)=>b[1]-a[1]).map(([k,v])=>
+    `<div class="barline"><div class="nm">${k}</div>
+      <div class="track"><div class="fill" style="width:${Math.max(v,0)/mixMax*100}%;background:var(--gilt)"></div></div>
+      <div class="amt">${(v/1000).toFixed(1)}k</div></div>`).join('')
+    || `<div class="empty" style="padding:16px 0">尚無銷售資料</div>`;
+
+  const byCat={};
+  state.expenses.forEach(e=>byCat[e.cat]=(byCat[e.cat]||0)+e.amt);
+  const max=Math.max(...Object.values(byCat),1);
+  document.getElementById('expBars').innerHTML=Object.entries(byCat)
+    .sort((a,b)=>b[1]-a[1]).map(([k,v])=>
+    `<div class="barline"><div class="nm">${k}</div>
+      <div class="track"><div class="fill" style="width:${v/max*100}%"></div></div>
+      <div class="amt">${(v/1000).toFixed(0)}k</div></div>`).join('');
+
+  const all=[...state.sales.map(x=>({date:x.date,l:(map[x.sku]?.name||x.sku)+(x.note?' ('+x.note+')':''),v:x.amt,pos:1})),
+             ...state.expenses.map(e=>({date:e.date,l:e.cat+' '+e.who,v:-e.amt,pos:0}))]
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('ledger').innerHTML=all.map(r=>
+    `<div class="lr"><span class="l">${r.date} ${r.l}</span>
+      <span style="color:${r.pos?'var(--green)':'var(--red)'}">${r.pos?'+':''}${r.v.toLocaleString()}</span></div>`).join('');
+  renderRollup();
+}
+
+/* 合併報表:多店時才顯示 */
+async function renderRollup(){
+  const box=document.getElementById('rollupBox');
+  if(!box)return;
+  if(!API_URL || !state.stores || state.stores.length<2){box.innerHTML='';return;}
+  box.innerHTML='<h2 class="sec">全店合併 ALL STORES</h2><div class="hint">載入中…</div>';
+  try{
+    const j=await apiPost({action:'rollup'}, 30000);
+    if(!j.ok)throw new Error(j.error);
+    const agg=j.data;
+    const codes=Object.keys(agg);
+    if(!codes.length){box.innerHTML='';return;}
+    let tR=0,tC=0,tE=0;
+    const rows=codes.map(c=>{
+      const a=agg[c];tR+=a.rev;tC+=a.cogs;tE+=a.exp;
+      const net=a.rev-a.cogs-a.exp;
+      return `<div class="lr"><span class="l">${c}</span>
+        <span style="color:${net>=0?'var(--green)':'var(--red)'}">${money(net)}</span></div>`;
+    }).join('');
+    const tNet=tR-tC-tE;
+    box.innerHTML=`<h2 class="sec">全店合併 ALL STORES</h2>
+      <div class="kpi">
+        <div class="cell"><div class="lab">總營收</div><div class="val">${money(tR)}</div></div>
+        <div class="cell"><div class="lab">總淨利</div><div class="val ${tNet>=0?'pos':'neg'}">${money(tNet)}</div></div>
+      </div>
+      <div class="ledger">${rows}</div>`;
+  }catch(e){ box.innerHTML=''; }
+}
+
+/* ---------------- 退換貨 ---------------- */
+function openReturn(){
+  const map={};state.styles.forEach(x=>map[x.no]=x);
+  const src=state.sales.filter(x=>x.qty>0);
+  if(!src.length){toast('沒有可退的銷售紀錄');return;}
+  const opts=src.map((s,i)=>`<option value="${i}">${s.date} ${map[s.sku]?.name||s.sku} ×${s.qty}</option>`).join('');
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>退貨 / 換貨</h3><div class="sub">選原銷售紀錄,退貨回補庫存並沖銷營收</div>
+    <label class="fld">原銷售</label><select class="f" id="rt_sale">${opts}</select>
+    <label class="fld">類型</label>
+    <div class="chips"><div class="chip on" onclick="pick(this,'rtype')">退貨</div><div class="chip" onclick="pick(this,'rtype')">換貨</div></div>
+    <label class="fld">原因</label><input class="f" id="rt_reason" placeholder="尺寸不合 / 瑕疵 …">
+    <button class="btn red" style="margin-top:16px" onclick="doReturn()">確認</button>`);
+  state.picks.rtype='退貨';
+}
+function doReturn(){
+  const src=state.sales.filter(x=>x.qty>0);
+  const s=src[+val('rt_sale')];if(!s){closeModal();return;}
+  const st=findStyle(s.sku);
+  if(st)st.qty+=s.qty;
+  const type=state.picks.rtype||'退貨';
+  state.returns=state.returns||[];
+  state.returns.unshift({time:nowHM(),type,name:st?st.name:s.sku,qty:s.qty,amt:s.amt,reason:val('rt_reason')});
+  api('return',{sku:s.sku,qty:s.qty,type,name:st?st.name:s.sku,amt:s.amt,
+    cost:s.cost||0,reason:val('rt_reason'),date:today(),time:nowHM()});
+  if(type==='退貨'){
+    state.sales.push({date:today(),sku:s.sku,qty:-s.qty,amt:-s.amt,cost:-(s.cost||0),note:'退貨'});
+    toast('已退貨,庫存回補、營收沖銷');
+  } else toast('已換貨,庫存回補');
+  closeModal();renderReturnList();
+}
+function renderReturnList(){
+  const el=document.getElementById('returnList');if(!el)return;
+  const rets=state.returns||[];
+  if(!rets.length){el.innerHTML=`<div class="empty" style="padding:20px 0">今天沒有退換貨</div>`;return;}
+  el.innerHTML=rets.map(r=>`<div class="card">
+    <div class="row-between">
+      <div><div class="style-no">${r.time} · ${r.type}</div>
+        <div style="font-weight:700;font-size:13px">${r.name} ×${r.qty}</div>
+        <div class="style-meta">${r.reason||'—'}</div></div>
+      <div class="mono" style="font-size:15px;color:${r.type==='退貨'?'var(--red)':'var(--muted)'}">
+        ${r.type==='退貨'?'−'+r.amt.toLocaleString():'換貨'}</div>
+    </div></div>`).join('');
+}
+
+/* ---------------- modals ---------------- */
+function openModal(html){document.getElementById('sheet').innerHTML=html;document.getElementById('modal').classList.add('on');}
+function closeModal(){document.getElementById('modal').classList.remove('on');}
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
+
+/* ---------------- 開銷 / 待匯款 ---------------- */
+function saveExpense(){
+  const amt=+val('expAmt')||0;
+  if(!amt){toast('請填金額');return;}
+  const ex={date:today(),cat:val('expCat'),amt,who:val('expWho')||'—',note:val('expNote')||'—'};
+  state.expenses.push(ex);
+  api('addExpense',{expense:ex});
+  document.getElementById('expAmt').value='';
+  document.getElementById('expWho').value='';
+  document.getElementById('expNote').value='';
+  toast('已記開銷 '+money(amt));
+  renderTopay();
+}
+function renderTopay(){
+  const el=document.getElementById('topayList');
+  if(!state.topay.length){el.innerHTML=`<div class="empty">沒有待匯款項目</div>`;return;}
+  el.innerHTML=state.topay.map(t=>`<div class="card pending">
+    <div class="row-between">
+      <div><div class="style-no">${t.no} · ${t.cat}</div>
+        <div style="font-weight:700">${t.who}</div></div>
+      <div style="text-align:right"><div class="mono" style="font-size:18px">${money(t.amt)}</div>
+        <button class="btn green sm" style="width:auto;margin-top:6px" onclick="payTopay('${t.no}')">✓ 已匯款</button></div>
+    </div></div>`).join('');
+}
+function payTopay(no){
+  const t=state.topay.find(x=>x.no===no);if(!t)return;
+  const ex={date:today(),cat:t.cat,amt:t.amt,who:t.who,note:'待匯款結清'};
+  state.expenses.push(ex);
+  api('payTopay',{no,expense:ex});
+  state.topay=state.topay.filter(x=>x.no!==no);
+  toast('已匯款並入帳 '+money(t.amt));
+  renderTopay();
+}
+
+/* ---------------- 手動補記銷售 ---------------- */
+function fillSaleStyles(){
+  const sel=document.getElementById('saleStyle');if(!sel)return;
+  sel.innerHTML=state.styles.map(s=>`<option value="${s.no}">${s.no} ${s.name}</option>`).join('');
+  fillSaleSkus();
+}
+function fillSaleSkus(){
+  const s=findStyle(document.getElementById('saleStyle').value);
+  if(s)document.getElementById('salePrice').value=s.price;
+}
+function saveSale(){
+  const s=findStyle(val('saleStyle'));if(!s)return;
+  const qty=+val('saleQty')||1;
+  const price=+val('salePrice')||s.price;
+  if(s.qty<qty){toast('庫存不足,僅剩 '+s.qty);return;}
+  s.qty-=qty;
+  const sale={date:today(),sku:s.no,qty,amt:qty*price,cost:s.cost*qty,note:'補記'};
+  state.sales.push(sale);
+  api('manualSale',{sale});
+  toast('已補記 '+s.name+' ×'+qty);
+}
+
+/* ---------------- util ---------------- */
+function pick(el,group){el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');state.picks[group]=el.textContent.trim();}
+function val(id){return document.getElementById(id).value.trim();}
+function today(){const d=new Date();return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0');}
+let toastT;
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2000);}
+
+function initDateline(){
+  const d=new Date();
+  const days=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  document.getElementById('dateline').textContent=
+    `TAINAN · ${days[d.getDay()]} ${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+}
+
+/* ---------------- boot ---------------- */
+initDateline();
+renderModebar();
+setMode('pos');
+setSync(API_URL?'syncing':'offline');
+if(API_URL){ cloudLoad(true).then(ok=>{ if(ok){renderStoreBar();refreshCurrentView();} }); }
+else { setTimeout(()=>toast('點右上角「未連線」設定雲端'),800); }
+window.addEventListener('online', flushQueue);
+</script>
+</body>
+</html>
