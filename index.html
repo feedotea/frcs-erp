@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>FRCS INVENTORY</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
     --ink:#1a1a1a;
@@ -73,6 +74,8 @@
   h2.sec{font-family:"Courier New",monospace;font-size:11px;letter-spacing:2px;color:var(--muted);
     text-transform:uppercase;margin:2px 0 10px;padding-bottom:5px;border-bottom:1px solid var(--line);}
   .row-between{display:flex;justify-content:space-between;align-items:center;}
+  #styleActions{display:flex;gap:6px;flex-shrink:0;white-space:nowrap;}
+  #styleActions .btn{margin:0 !important;}
 
   /* ---- cards ---- */
   .card{background:var(--paper-2);border:1px solid var(--line);padding:12px;margin-bottom:10px;}
@@ -268,9 +271,57 @@
   .receipt .rline{border-top:1px dashed #000;margin:8px 0;}
   .receipt .ri{display:flex;justify-content:space-between;margin:2px 0;}
   .receipt .rtot{display:flex;justify-content:space-between;font-weight:700;font-size:14px;margin-top:4px;}
+
+  /* ---- 登入畫面 ---- */
+  .lock{position:fixed;inset:0;background:var(--paper);z-index:300;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .lock .box{width:100%;max-width:340px;}
+  .lock .brand{font-size:22px;letter-spacing:4px;}
+  .lock .brand small{font-size:10px;letter-spacing:2px;}
+  .lock .err{color:var(--red);font-size:12px;min-height:18px;margin-top:8px;white-space:pre-line;}
+
+  /* ---- 商品圖片 ---- */
+  .thumb{width:64px;height:64px;flex:0 0 64px;background:var(--paper);border:1px solid var(--line);object-fit:cover;display:block;}
+  .thumb.ph{display:flex;align-items:center;justify-content:center;font-family:"Courier New",monospace;font-size:9px;color:var(--muted);letter-spacing:1px;text-align:center;line-height:1.3;}
+  .thumb.sm{width:44px;height:44px;flex-basis:44px;}
+  .style-head.withimg{gap:10px;}
+  .photo-box{display:flex;gap:12px;align-items:center;margin-top:6px;}
+  .photo-box .thumb{width:96px;height:96px;flex-basis:96px;}
+  .photo-box .ops{flex:1;}
+  .photo-box .ops .btn{margin-top:0;}
+  .photo-box .ops .btn+.btn{margin-top:6px;}
+  .photo-box input[type=file]{display:none;}
+
+  /* ---- 手動選品：圖片格 ---- */
+  .pickgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+  .pickcard{border:1px solid var(--line);background:var(--paper-2);padding:6px;cursor:pointer;text-align:left;position:relative;}
+  .pickcard .incart{position:absolute;top:10px;right:10px;background:var(--green);color:#fff;font-family:"Courier New",monospace;font-size:11px;font-weight:700;padding:2px 6px;}
+  .pickcard .thumb{width:100%;height:auto;aspect-ratio:1/1;flex:none;}
+  .pickcard .pn{font-size:11px;font-weight:700;margin-top:5px;line-height:1.3;max-height:2.6em;overflow:hidden;}
+  .pickcard .pp{font-family:"Courier New",monospace;font-size:11px;margin-top:2px;display:flex;justify-content:space-between;}
+  .pickcard.out{opacity:.4;}
+
+  /* ---- 新增商品表單 ---- */
+  .margin-line{font-family:"Courier New",monospace;font-size:11px;color:var(--muted);margin-top:8px;padding:8px 10px;border:1px dashed var(--line);}
+  .margin-line b{color:var(--green);}
+  .margin-line b.bad{color:var(--red);}
+  .fld .opt{color:var(--muted);text-transform:none;letter-spacing:0;}
 </style>
 </head>
 <body>
+<!-- 登入 -->
+<div class="lock" id="lockScreen">
+  <div class="box">
+    <div class="brand">FRCS<small>INVENTORY & LEDGER</small></div>
+    <label class="fld">帳號 EMAIL</label>
+    <input class="f" id="lg_email" type="email" autocomplete="username" inputmode="email" placeholder="you@example.com">
+    <label class="fld">密碼 PASSWORD</label>
+    <input class="f" id="lg_pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
+    <button class="btn" id="lg_btn" style="margin-top:16px" onclick="signIn()">登入</button>
+    <div class="err" id="lg_err"></div>
+    <div class="hint">帳號由老闆在 Supabase 建立。登入後老闆帳號要再輸 PIN 才看得到成本與帳務。</div>
+  </div>
+</div>
+
 <div class="app">
 
   <div class="masthead">
@@ -522,10 +573,11 @@
 /* ---------------- sample data ---------------- */
 const SIZES=["XS","S","M","L","XL"];
 const state={
-  role:'staff',            // 'staff' | 'owner'
-  pin:'1234',
+  role:'staff',            // 畫面模式：'staff' | 'owner'（owner 要帳號是 owner 且輸過 PIN）
+  account:null,            // 登入帳號 {name, role}
   store:'FRCS',
   stores:[{code:'FRCS',name:'FRCS 台南'}],
+  showInactive:false,
   mode:'pos',
   posTab:'register',
   stockTab:'styles',
@@ -534,55 +586,22 @@ const state={
   cart:[],
   cartMember:null,
   cartDiscount:0,
-  members:[
-    {phone:"0912345678", name:"L 小姐", tier:"VIP", disc:0.9, spent:48200, joined:"2026.03"},
-    {phone:"0928777123", name:"陳先生", tier:"一般", disc:0.95, spent:12600, joined:"2026.05"},
-  ],
-  styles:[
-    {no:"21497", name:"顏染造型衫-淺灰", cat:"上衣", gender:"男", cost:520, price:1480, low:1, qty:3},
-    {no:"21498", name:"顏染造型衫-深灰", cat:"上衣", gender:"男", cost:520, price:1480, low:1, qty:1},
-    {no:"21478", name:"圓領針織衫/灰",   cat:"上衣", gender:"男", cost:680, price:1880, low:1, qty:0},
-    {no:"20113", name:"單寧外套-軟面料黑", cat:"外套", gender:"男", cost:1850, price:4980, low:1, qty:2},
-    {no:"22275", name:"丹寧側釦彎刀褲藍M", cat:"下身", gender:"男", cost:960, price:2680, low:1, qty:4},
-    {no:"22353", name:"百慕達短褲-黑色",  cat:"下身", gender:"男", cost:540, price:1580, low:2, qty:5},
-    {no:"31201", name:"泡泡袖襯衫-白",    cat:"上衣", gender:"女", cost:610, price:1680, low:1, qty:2},
-    {no:"32104", name:"高腰寬褲-炭灰",    cat:"下身", gender:"女", cost:880, price:2380, low:1, qty:1},
-  ],
-  cats:["上衣","下身","外套"],
-  genders:["男","女"],
+  /* 資料全部從 Supabase 載入；登入前都是空的 */
+  members:[],
+  styles:[],
+  cats:["上衣","下身","外套","配件"],
+  genders:["男","女","中性"],
   filter:{cat:"全部",gender:"全部"},
-  preorders:[
-    {no:"PO-0417", sku:"20113", qty:1, price:4980, deposit:2000, stage:"收訂金", cust:"L 小姐"},
-    {no:"PO-0418", sku:"21478", qty:1, price:1880, deposit:500,  stage:"已到貨", cust:"陳先生"},
-  ],
-  topay:[
-    {no:"TP-0091", who:"Seoul 採買尾款", amt:48000, cat:"進貨貨款"},
-  ],
-  expenses:[
-    {date:"07/01", cat:"房租", amt:38000, who:"房東", note:"7月"},
-    {date:"07/03", cat:"進貨貨款", amt:62000, who:"Seoul", note:"Q3 首批訂金"},
-    {date:"07/05", cat:"行銷", amt:6500, who:"IG 投放", note:"ISSUE 03"},
-  ],
-  sales:[
-    {date:"07/02", sku:"21497", qty:1, amt:1480, cost:520},
-    {date:"07/04", sku:"22353", qty:1, amt:1580, cost:540},
-    {date:"07/06", sku:"20113", qty:1, amt:4980, cost:1850},
-  ],
+  preorders:[],
+  topay:[],
+  expenses:[],
+  sales:[],
+  txns:[],
+  returns:[],
+  intakeLog:[],
+  transfers:[],
   picks:{pay:"現金"},
-  purchases:[
-    {no:"PO26-03", vendor:"Seoul / 東大門 A", currency:"KRW", rate:0.0235,
-      freight:8200, duty:3400, stage:"已到貨", ordered:"2026-06-02", eta:"2026-07-15",
-      items:[
-        {no:"21501", name:"顏染造型衫-黑", cat:"上衣", gender:"男", unitFx:22000, qty:4},
-        {no:"21502", name:"顏染造型衫-軍綠", cat:"上衣", gender:"男", unitFx:22000, qty:3},
-        {no:"20140", name:"教練外套-炭", cat:"外套", gender:"男", unitFx:68000, qty:2},
-      ]},
-    {no:"PO26-04", vendor:"Seoul / 聖水 B", currency:"KRW", rate:0.0235,
-      freight:5600, duty:0, stage:"已訂購", ordered:"2026-07-01", eta:"2026-08-20",
-      items:[
-        {no:"32110", name:"垂墜寬褲-奶茶", cat:"下身", gender:"女", unitFx:41000, qty:5},
-      ]},
-  ],
+  purchases:[],
 };
 
 /* ---- 成本遮蔽:唯一的權限判斷 ---- */
@@ -605,16 +624,24 @@ function poUnitCost(p,item){
 const PRE_STAGES=["收訂金","已到貨","已出貨","已收尾款"];
 const PO_STAGES=["已訂購","已付款","已出貨","已到貨","已配送","已入倉"];
 
-/* ================= 雲端同步層 ================= */
-const API_KEY_LS='acave_api_url';
-const API_SECRET_LS='acave_api_key';
-let API_URL = localStorage.getItem(API_KEY_LS) || '';
-let API_SECRET = localStorage.getItem(API_SECRET_LS) || '';
-let syncState = 'offline'; // offline | ok | syncing | error
-let pendingQueue = JSON.parse(localStorage.getItem('acave_queue')||'[]');
-let lastError='';
+/* ================= 後端：Supabase ================= */
+/* 跟 FEEDO ERP 同一套做法：所有表 deny-all，前端只呼叫 frcs_* RPC。
+   這兩個值從 Supabase Dashboard → Project Settings → API 複製。anon key 是公開的，
+   沒有 frcs_staff 帳號的人拿到也做不了事。 */
+const SUPABASE_URL  = "";
+const SUPABASE_ANON = "";
+const PHOTO_BUCKET  = "frcs-photos";
+const sb = (SUPABASE_URL && window.supabase) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
+let syncState = 'offline'; // offline | ok | syncing | error
+let pendingQueue = [];
+try{ pendingQueue = JSON.parse(localStorage.getItem('frcs_queue')||'[]'); }catch(e){ pendingQueue=[]; }
+let lastError='';
 let barTimer=null, justFlushed=false;
+
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = Math.random()*16|0; return (c==="x" ? r : (r&0x3|0x8)).toString(16); }));
 
 function setSync(s,msg){
   syncState=s;
@@ -624,7 +651,7 @@ function setSync(s,msg){
   const el=document.getElementById('syncDot');
   if(el){
     const map={ok:['●','var(--green)','已同步'],syncing:['◐','var(--amber)','同步中'],
-               error:['●','var(--red)','同步失敗'],offline:['○','var(--muted)','未連線']};
+               error:['●','var(--red)','同步失敗'],offline:['○','var(--muted)','未登入']};
     const [ic,color,label]=map[s]||map.offline;
     el.innerHTML=`<span style="color:${color}">${ic}</span> ${msg||label}`;
   }
@@ -635,7 +662,6 @@ function setSync(s,msg){
   bar.className='syncbar';
 
   if(n>0){
-    /* 最重要的狀態:有資料還沒進雲端 */
     bar.classList.add('show', s==='syncing' ? 'busy' : 'warn');
     bar.innerHTML = s==='syncing'
       ? `<b>補送中…</b> 還有 ${n} 筆`
@@ -643,28 +669,21 @@ function setSync(s,msg){
          <span class="sub">網路恢復後會自動補送 · 請勿清除瀏覽器資料或換裝置</span>`;
     return;
   }
-
   if(s==='offline'){
     bar.classList.add('show','warn');
-    bar.innerHTML=`<b>⚠ 尚未連線雲端</b>
-      <span class="sub">點此設定 · 未連線時的操作不會被保存</span>`;
+    bar.innerHTML=`<b>⚠ 尚未連線雲端</b><span class="sub">${SUPABASE_URL?'請重新登入':'index.html 還沒填 Supabase 網址'}</span>`;
     return;
   }
-
   if(s==='error'){
     bar.classList.add('show','warn');
-    bar.innerHTML=`<b>⚠ 同步失敗</b>
-      <span class="sub">${lastError||'點此檢查連線設定'}</span>`;
+    bar.innerHTML=`<b>⚠ 同步失敗</b><span class="sub">${lastError||'點此檢查連線'}</span>`;
     return;
   }
-
   if(s==='syncing'){
     bar.classList.add('show','busy');
     bar.innerHTML=`<b>同步中…</b>`;
     return;
   }
-
-  /* ok:短暫顯示綠色確認,兩秒後收起,不長期佔空間 */
   if(s==='ok' && justFlushed){
     justFlushed=false;
     bar.classList.add('show','good');
@@ -673,48 +692,42 @@ function setSync(s,msg){
     barTimer=setTimeout(()=>{bar.className='syncbar';},2500);
   }
 }
-function saveQueue(){localStorage.setItem('acave_queue',JSON.stringify(pendingQueue));}
+function saveQueue(){ try{ localStorage.setItem('frcs_queue',JSON.stringify(pendingQueue)); }catch(e){} }
 
-/* 送出一個動作;失敗則排進佇列,連線後自動補送 */
-/* 所有請求一律走 POST。
-   原因:Apps Script 的 GET 回應帶 Content-Disposition: attachment,
-   Safari 會把它當成檔案下載,<script> 標籤不執行它,JSONP 因此永遠逾時。
-   POST 用 text/plain 不觸發 CORS preflight,回應可正常讀取。 */
-async function apiPost(body, timeoutMs){
-  if(!API_URL) throw new Error('尚未設定後端網址');
-  const ctrl = new AbortController();
-  const timer = setTimeout(()=>ctrl.abort(), timeoutMs||60000);
-  try{
-    const res = await fetch(API_URL, {
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body: JSON.stringify(Object.assign({key:API_SECRET}, body)),
-      signal: ctrl.signal,
-      redirect:'follow'
-    });
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    return await res.json();
-  }catch(err){
-    if(err.name==='AbortError') throw new Error('連線逾時');
-    throw new Error(err.message||'連線失敗');
-  }finally{
-    clearTimeout(timer);
-  }
+/* 直接呼叫一支 RPC，錯就丟出來 */
+async function rpc(fn,args){
+  if(!sb) throw new Error('尚未設定後端');
+  const {data,error}=await sb.rpc(fn,args||{});
+  if(error) throw error;
+  return data;
 }
+/* 後端明確拒絕（資料不對、沒權限、沒登入）→ 重送也不會過，不排隊 */
+function isBizErr(e){ return !!(e && e.code); }
+function errMsg(e){
+  if(!e) return '未知錯誤';
+  const m=String(e.message||e);
+  if(e.code==='28000'||e.code==='PGRST301'||/JWT/i.test(m)) return '登入已過期，請重新登入';
+  if(e.code==='PGRST202') return '後端缺這支函式，請先部署 SQL：'+m.replace(/^.*function\s*/,'').slice(0,60);
+  if(/Failed to fetch|NetworkError|Load failed/i.test(m)) return '連不到雲端';
+  return m;
+}
+/* p_store 是本店代號 */
+function S(extra){ return Object.assign({p_store:state.store}, extra||{}); }
 
-async function api(action, payload){
-  if(!API_URL){ return {ok:false, error:'尚未設定後端網址'}; }
-  const body=Object.assign({action, store:state.store}, payload);
+/* 送出一個寫入動作;網路斷掉就排進佇列,連線後自動補送 */
+async function api(fn, args){
+  if(!sb){ return {ok:false, error:'尚未設定後端'}; }
+  const body={fn, args:args||{}};
   try{
     setSync('syncing');
-    const j = await apiPost(body, 40000);
-    if(!j.ok) throw new Error(j.error||'後端回傳錯誤');
+    const d = await rpc(fn, body.args);
     setSync('ok');
-    return j;
+    return d || {ok:true};
   }catch(err){
-    lastError=String(err.message||err);
-    if(lastError.indexOf('密鑰')>=0){
-      setSync('error','密鑰錯誤');
+    lastError=errMsg(err);
+    if(isBizErr(err)){
+      setSync('ok');
+      toast(lastError);
       return {ok:false, error:lastError};
     }
     pendingQueue.push(body); saveQueue();
@@ -724,60 +737,154 @@ async function api(action, payload){
 }
 
 async function flushQueue(){
-  if(!API_URL || !pendingQueue.length) return;
+  if(!sb || !pendingQueue.length) return;
   const before = pendingQueue.length;
   setSync('syncing','補送 '+pendingQueue.length);
   while(pendingQueue.length){
+    const b=pendingQueue[0];
     try{
-      const j = await apiPost(pendingQueue[0], 40000);
-      if(!j.ok) break;
+      await rpc(b.fn, b.args);
       pendingQueue.shift(); saveQueue();
-    }catch(e){ break; }
+    }catch(e){
+      lastError=errMsg(e);
+      if(isBizErr(e) && e.code!=='28000' && e.code!=='PGRST301'){
+        /* 後端拒絕這筆（例如單號重複以外的資料錯誤）：丟掉，不然會卡住後面全部 */
+        console.warn('丟棄無法補送的紀錄', b, e);
+        pendingQueue.shift(); saveQueue();
+        toast('有一筆紀錄後端不收：'+lastError);
+        continue;
+      }
+      break;
+    }
   }
   if(!pendingQueue.length){ justFlushed=(before>0); setSync('ok'); }
   else setSync('error','待補送 '+pendingQueue.length);
 }
 
 async function cloudLoad(silent){
-  if(!API_URL){ setSync('offline'); return false; }
+  if(!sb){ setSync('offline'); return false; }
   try{
     setSync('syncing','載入中');
-    const j = await apiPost({action:'load', store:state.store}, 60000);
-    if(!j.ok) throw new Error(j.error||'後端回傳錯誤');
-    const d=j.data;
+    /* 第一次載入不指定店,讓後端給帳號的預設店 */
+    const d = await rpc('frcs_load', {p_store: state.storeKnown ? state.store : null});
     if(d.store) state.store=d.store;
+    state.storeKnown=true;
     if(d.stores && d.stores.length) state.stores=d.stores;
+    if(d.me) state.account=d.me;
     state.transfers = d.transfers||[];
     state.styles    = (d.items||[]).map(normItem);
     state.members   = (d.members||[]).map(m=>({...m, phone:normPhone(m.phone),
                         disc:Number(m.disc)||0.95, spent:Number(m.spent)||0}));
-    state.txns      = d.txns||[];
+    state.txns      = (d.txns||[]).map(t=>({...t, total:Number(t.total)||0, items:t.items||[]}));
     state.sales     = (d.sales||[]).map(s=>({...s, qty:Number(s.qty)||0, amt:Number(s.amt)||0, cost:Number(s.cost)||0}));
     state.preorders = (d.preorders||[]).map(p=>({...p, qty:Number(p.qty)||1, price:Number(p.price)||0, deposit:Number(p.deposit)||0}));
     state.purchases = (d.purchases||[]).map(p=>({...p, rate:Number(p.rate)||1,
-                        freight:Number(p.freight)||0, duty:Number(p.duty)||0, items:p.items||[]}));
+                        freight:Number(p.freight)||0, duty:Number(p.duty)||0,
+                        items:(p.items||[]).map(i=>({...i, unitFx:Number(i.unitFx)||0, qty:Number(i.qty)||0, price:Number(i.price)||0}))}));
     state.expenses  = (d.expenses||[]).map(e=>({...e, amt:Number(e.amt)||0}));
     state.topay     = (d.topay||[]).map(t=>({...t, amt:Number(t.amt)||0}));
-    state.returns   = d.returns||[];
-    state.intakeLog = d.intakeLog||[];
-    if(d.config && d.config.pin) state.pin=String(d.config.pin);
+    state.returns   = (d.returns||[]).map(r=>({...r, qty:Number(r.qty)||0, amt:Number(r.amt)||0}));
+    state.intakeLog = (d.intakeLog||[]).map(i=>({...i, qty:Number(i.qty)||0}));
+    /* 店員帳號永遠是店員畫面 */
+    if(!state.account || state.account.role!=='owner') state.role='staff';
     setSync('ok');
     if(!silent) toast('已載入 '+state.styles.length+' 項商品');
     await flushQueue();
     return true;
   }catch(err){
-    lastError=err.message;
+    lastError=errMsg(err);
+    lastErrorCode=err&&err.code;
     setSync('error');
-    if(!silent) toast('載入失敗:'+err.message);
+    if(!silent) toast('載入失敗:'+lastError);
     return false;
   }
 }
+let lastErrorCode=null;
 
 function normItem(i){
   return {no:String(i.no), name:i.name, cat:i.cat, gender:i.gender,
     cost:Number(i.cost)||0, price:Number(i.price)||0,
     qty:Number(i.qty)||0, low:Number(i.low)||1,
+    photo:i.photo||'', note:i.note||'', active:i.active!==false,
     elsewhere:(i.elsewhere||[]).filter(e=>Number(e.qty)>0)};
+}
+
+/* ---------------- 登入 ---------------- */
+function showLock(show){ const l=document.getElementById('lockScreen'); if(l) l.style.display=show?'flex':'none'; }
+async function signIn(){
+  const email=val('lg_email'), pw=document.getElementById('lg_pw').value;
+  const err=document.getElementById('lg_err'), btn=document.getElementById('lg_btn');
+  if(!sb){ err.textContent='index.html 還沒填 Supabase 網址與 anon key'; return; }
+  if(!email||!pw){ err.textContent='請填帳號和密碼'; return; }
+  btn.disabled=true; btn.textContent='登入中…'; err.textContent='';
+  const {error}=await sb.auth.signInWithPassword({email,password:pw});
+  btn.disabled=false; btn.textContent='登入';
+  if(error){ err.textContent='登入失敗，請確認帳號密碼。'; return; }
+  document.getElementById('lg_pw').value='';
+  await enterApp();
+}
+async function signOut(){
+  if(pendingQueue.length && !confirm(`還有 ${pendingQueue.length} 筆沒同步到雲端。\n登出後這些紀錄會留在這台裝置，要下次同一台登入才送得出去。\n確定登出？`)) return;
+  await sb.auth.signOut();
+  location.reload();
+}
+/* 登入成功後：先補送上次沒送出去的，再載入 */
+async function enterApp(){
+  const err=document.getElementById('lg_err');
+  const ok=await cloudLoad(true);
+  if(!ok){
+    if(lastErrorCode==='42501'){
+      err.textContent='這個帳號沒有 FRCS 權限。請老闆在 Supabase 把它加進 frcs_staff。';
+      await sb.auth.signOut();
+    } else {
+      err.textContent='連線失敗：'+lastError+(pendingQueue.length?`\n（${pendingQueue.length} 筆待同步紀錄已保留在本機）`:'');
+    }
+    showLock(true);
+    return;
+  }
+  showLock(false);
+  state.role='staff';
+  renderModebar(); renderStoreBar(); refreshCurrentView();
+  const b=document.getElementById('drawerBtn');
+  drawerPing().then(ok=>{ if(b && ok) b.style.display=''; });
+}
+
+/* ---------------- 商品圖片 ---------------- */
+/* 手機拍的照片動輒 3–5 MB，先縮到長邊 900px 再上傳；清單一次載幾十張也不會慢 */
+function resizeImage(file, max, quality){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const r=Math.min(1, (max||900)/Math.max(img.width,img.height));
+      const w=Math.round(img.width*r), h=Math.round(img.height*r);
+      const c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(b=>b?resolve(b):reject(new Error('圖片轉檔失敗')),'image/jpeg',quality||0.82);
+    };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('讀不到這張圖片')); };
+    img.src=url;
+  });
+}
+/* 固定檔名 items/<編號>.jpg，重傳就是覆蓋；網址加 ?v= 避免快取舊圖 */
+async function uploadPhoto(no, file){
+  if(!sb) throw new Error('尚未設定後端');
+  const blob=await resizeImage(file, 900, 0.82);
+  const path=`items/${encodeURIComponent(no)}.jpg`;
+  const {error}=await sb.storage.from(PHOTO_BUCKET).upload(path, blob, {upsert:true, contentType:'image/jpeg', cacheControl:'3600'});
+  if(error) throw error;
+  const {data}=sb.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+  return data.publicUrl+'?v='+Date.now();
+}
+async function removePhoto(no){
+  if(!sb) return;
+  await sb.storage.from(PHOTO_BUCKET).remove([`items/${encodeURIComponent(no)}.jpg`]);
+}
+function thumbHtml(s, cls){
+  return s.photo
+    ? `<img class="thumb ${cls||''}" src="${s.photo}" alt="" loading="lazy">`
+    : `<div class="thumb ph ${cls||''}">${(cls||'').includes('sm')?'—':'NO<br>PHOTO'}</div>`;
 }
 
 /* ---- 店別切換(只有多店時才顯示) ---- */
@@ -804,22 +911,18 @@ async function switchStore(code){
 
 /* 設定頁 */
 function openSettings(){
+  const acc=state.account;
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>雲端設定</h3><div class="sub">連線到 Google Sheets 後端</div>
-    <label class="fld">Apps Script 部署網址</label>
-    <input class="f" id="cfg_url" value="${API_URL}" placeholder="https://script.google.com/macros/s/.../exec">
-    <label class="fld">存取密鑰</label>
-    <input class="f" id="cfg_key" type="password" value="${API_SECRET}" placeholder="向 Francis 索取">
-    <button class="btn" style="margin-top:12px" onclick="saveApiUrl()">儲存並連線</button>
-    <button class="btn ghost sm" onclick="cloudLoad()">重新載入雲端資料</button>
-    <button class="btn ghost sm" onclick="testConn()">測試連線</button>
+    <h3>連線與帳號</h3><div class="sub">後端：Supabase${acc?` · 登入為 ${acc.name}（${acc.role==='owner'?'老闆帳號':'店員帳號'}）`:''}</div>
+    <div class="hint">${SUPABASE_URL?SUPABASE_URL.replace('https://',''):'index.html 還沒填 Supabase 網址'}</div>
+    <button class="btn ghost sm" style="margin-top:12px" onclick="cloudLoad().then(ok=>{if(ok){renderStoreBar();refreshCurrentView();}})">重新載入雲端資料</button>
+    ${pendingQueue.length?`<button class="btn gilt sm" onclick="flushQueue()">補送 ${pendingQueue.length} 筆待同步</button>`:''}
+    <button class="btn ghost sm" onclick="signOut()">登出</button>
     <label class="fld" style="margin-top:14px">收銀主機位址(出單機 / 錢箱)</label>
     <input class="f" id="cfg_bridge" value="${DRAWER_URL}" placeholder="https://192.168.1.200:9999">
     <button class="btn ghost sm" onclick="saveBridge()">儲存並測試硬體</button>
-    ${pendingQueue.length?`<button class="btn gilt sm" onclick="flushQueue()">補送 ${pendingQueue.length} 筆待同步</button>`:''}
     ${lastError?`<div class="hint" style="color:var(--red);margin-top:10px">最後錯誤:${lastError}</div>`:''}
-    <div class="hint">網址與密鑰請向 Francis 索取。兩者都填對才能存取資料。
-    密鑰在 Apps Script 的 API_KEY 常數裡設定,改完需重新部署。</div>`);
+    <div class="hint">帳號在 Supabase Dashboard → Authentication 建立，再加進 frcs_staff 名冊。</div>`);
 }
 async function saveBridge(){
   const v=document.getElementById('cfg_bridge').value.trim().replace(/\/+$/,'');
@@ -830,35 +933,6 @@ async function saveBridge(){
   const b=document.getElementById('drawerBtn');
   if(b) b.style.display = ok ? '' : 'none';
   toast(ok?'已連上收銀主機 ✓':'連不到收銀主機,請確認橋接程式已啟動、憑證已信任');
-}
-
-async function testConn(){
-  if(!API_URL){toast('請先填網址');return;}
-  try{
-    setSync('syncing','測試中');
-    const j=await apiPost({action:'ping'}, 20000);
-    if(!j.ok){setSync('error');toast('後端回傳異常');return;}
-    if(j.keyOk===false){
-      setSync('error'); lastError='密鑰錯誤';
-      toast('連線正常,但密鑰錯誤');
-      return;
-    }
-    setSync('ok');
-    toast('連線正常 ✓');
-  }catch(e){
-    lastError=e.message; setSync('error');
-    toast('連線失敗:'+e.message);
-  }
-}
-
-async function saveApiUrl(){
-  API_URL=val('cfg_url').trim();
-  API_SECRET=document.getElementById('cfg_key').value.trim();
-  localStorage.setItem(API_KEY_LS,API_URL);
-  localStorage.setItem(API_SECRET_LS,API_SECRET);
-  closeModal();
-  if(API_URL){ const ok=await cloudLoad(); if(ok){renderStoreBar();refreshCurrentView();} }
-  else setSync('offline');
 }
 function refreshCurrentView(){
   const t=state[MODE_TAB[state.mode]];
@@ -961,13 +1035,20 @@ function renderModebar(){
   const modes=allowedModes();
   let html=modes.map(m=>
     `<button class="${state.mode===m?'on':''}" onclick="setMode('${m}')">${MODE_LABEL[m]}</button>`).join('');
-  html+= state.role==='owner'
-    ? `<button class="lockbtn" onclick="lockOwner()" title="鎖定">🔓</button>`
-    : `<button class="lockbtn" onclick="openPin()" title="老闆模式">🔒</button>`;
+  /* 只有老闆帳號才有鎖;店員帳號後端不給成本,鎖也沒意義 */
+  const ownerAcc = state.account && state.account.role==='owner';
+  if(ownerAcc){
+    html+= state.role==='owner'
+      ? `<button class="lockbtn" onclick="lockOwner()" title="鎖定">🔓</button>`
+      : `<button class="lockbtn" onclick="openPin()" title="老闆模式">🔒</button>`;
+  }
   mb.innerHTML=html;
 }
 function setMode(m){
-  if(!allowedModes().includes(m)){openPin();return;}
+  if(!allowedModes().includes(m)){
+    if(state.account && state.account.role==='owner') openPin(); else toast('這個功能限老闆帳號');
+    return;
+  }
   state.mode=m;
   const first=TABS[m][0];
   state[MODE_TAB[m]]=first.id;
@@ -1007,8 +1088,8 @@ function renderStyleActions(){
   const el=document.getElementById('styleActions');if(!el)return;
   el.innerHTML = canSeeCost()
     ? `<button class="btn ghost sm" style="width:auto;margin:0 0 0 6px" onclick="openImport()">匯入</button>
-       <button class="btn ghost sm" style="width:auto;margin:0 0 0 6px" onclick="openNewStyle()">＋ 新商品</button>`
-    : `<button class="btn ghost sm" style="width:auto;margin:0" onclick="openNewStyle()">＋ 新商品</button>`;
+       <button class="btn sm" style="width:auto;margin:0 0 0 6px" onclick="openNewStyle()">＋ 新商品</button>`
+    : `<button class="btn sm" style="width:auto;margin:0" onclick="openNewStyle()">＋ 新商品</button>`;
 }
 
 /* ---------------- PIN / role ---------------- */
@@ -1021,8 +1102,13 @@ function openPin(){
     <div class="hint">預設 PIN 為 1234,解鎖後可在帳務→開銷頁底變更。</div>`);
   setTimeout(()=>document.getElementById('pin_in').focus(),100);
 }
-function doPin(){
-  if(val('pin_in')!==state.pin){toast('PIN 錯誤');return;}
+async function doPin(){
+  const pin=val('pin_in');
+  if(!pin){toast('請輸入 PIN');return;}
+  let ok=false;
+  try{ ok=await rpc('frcs_check_pin',{p_pin:pin}); }
+  catch(e){ toast(errMsg(e)); return; }
+  if(!ok){toast('PIN 錯誤');return;}
   state.role='owner';closeModal();renderModebar();
   const t=state[MODE_TAB[state.mode]];
   const tab=TABS[state.mode].find(x=>x.id===t);
@@ -1047,11 +1133,13 @@ function openChangePin(){
     <input class="f" id="np_2" type="password" inputmode="numeric" maxlength="6">
     <button class="btn" style="margin-top:14px" onclick="doChangePin()">儲存</button>`);
 }
-function doChangePin(){
+async function doChangePin(){
   const a=val('np_1'),b=val('np_2');
-  if(a.length<4){toast('至少 4 位數');return;}
+  if(!/^\d{4,6}$/.test(a)){toast('PIN 要 4 到 6 位數字');return;}
   if(a!==b){toast('兩次不一致');return;}
-  state.pin=a;api('setConfig',{key:'pin',value:a});closeModal();toast('PIN 已變更');
+  try{ await rpc('frcs_set_pin',{p_pin:a}); }
+  catch(e){ toast(errMsg(e)); return; }
+  closeModal();toast('PIN 已變更');
 }
 
 function qtyClass(q,low){ if(q===0)return'q0'; if(q<=low)return'qlow'; return'qok'; }
@@ -1071,17 +1159,21 @@ function renderStyles(){
   const el=document.getElementById('styleList');
   const q=(document.getElementById('styleSearch')?.value||'').trim();
   const list=state.styles.filter(s=>
+    (s.active!==false || state.showInactive) &&
     (state.filter.cat==='全部'||s.cat===state.filter.cat) &&
     (state.filter.gender==='全部'||s.gender===state.filter.gender) &&
     (!q||s.no.includes(q)||s.name.includes(q)));
-  if(!list.length){el.innerHTML=`<div class="empty">${q?'查無符合商品':'此分類沒有商品'}</div>`;return;}
+  const hidden=state.styles.filter(s=>s.active===false).length;
+  const foot=(canSeeCost()&&hidden)?`<div class="hint" style="text-align:center;margin-top:6px;cursor:pointer" onclick="toggleInactive()">${state.showInactive?'隱藏已下架':'顯示 '+hidden+' 項已下架'}</div>`:'';
+  if(!list.length){el.innerHTML=`<div class="empty">${q?'查無符合商品':'此分類沒有商品'}</div>`+foot;return;}
   el.innerHTML=list.map(s=>{
     const margin=s.price-s.cost;
     const mpct=s.price?Math.round(margin/s.price*100):0;
-    return `<div class="card">
-      <div class="style-head">
+    return `<div class="card" style="${s.active===false?'opacity:.5':''}">
+      <div class="style-head withimg">
+        ${thumbHtml(s)}
         <div style="flex:1;min-width:0">
-          <div class="style-no">${s.no}</div>
+          <div class="style-no">${s.no}${s.active===false?' · 已下架':''}</div>
           <div class="style-name">${s.name}</div>
           <div class="tags-row">
             <span class="tag gender">${s.gender}</span>
@@ -1100,10 +1192,10 @@ function renderStyles(){
       </div>
       <div class="btn-row">
         ${(s.elsewhere&&s.elsewhere.length)?`<button class="btn ghost sm" onclick="openTransfer('${s.no}')">調貨</button>`:''}
-        ${canSeeCost()?`<button class="btn ghost sm" onclick="openEditStyle('${s.no}')">編輯 · 成本</button>`:''}
+        <button class="btn ghost sm" onclick="openEditStyle('${s.no}')">${canSeeCost()?'編輯 · 成本':'編輯'}</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')+foot;
 }
 
 /* ================= POS / REGISTER ================= */
@@ -1179,6 +1271,7 @@ function renderRegister(){
   if(!state.cart.length){cl.innerHTML=`<div class="empty">購物車是空的<br>掃描條碼或手動選品加入</div>`;}
   else{
     cl.innerHTML=state.cart.map(c=>`<div class="cartrow">
+      ${thumbHtml(findStyle(c.no)||{},'sm')}
       <div class="ci"><div class="cn">${c.name}</div>
         <div class="cv">${c.no} · ${money(c.price)}</div></div>
       <div class="qstep">
@@ -1206,14 +1299,31 @@ function renderRegister(){
 }
 
 function openPickItem(){
-  const opts=state.styles.map(s=>`<option value="${s.no}">${s.no} ${s.name}</option>`).join('');
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>手動選品</h3><div class="sub">選商品加入購物車</div>
-    <label class="fld">商品</label><select class="f" id="pk_no">${opts}</select>
-    <label class="fld">數量</label><input class="f" id="pk_qty" type="number" value="1" inputmode="numeric">
-    <button class="btn green" style="margin-top:16px" onclick="doPickItem()">加入購物車</button>`);
+    <h3>手動選品</h3><div class="sub">點一下加一件,再點再加</div>
+    <div class="scanbox" style="border-color:var(--line);margin-top:8px">
+      <span class="scanic">⌕</span>
+      <input class="f scanin" id="pk_q" placeholder="搜尋編號或品名" oninput="renderPickGrid()" autocomplete="off">
+    </div>
+    <div class="pickgrid" id="pk_grid"></div>`);
+  renderPickGrid();
+  setTimeout(()=>document.getElementById('pk_q')?.focus(),100);
 }
-function doPickItem(){ if(addToCart(val('pk_no'),+val('pk_qty')||1))closeModal(); }
+function renderPickGrid(){
+  const q=(document.getElementById('pk_q')?.value||'').trim();
+  const list=state.styles.filter(s=>s.active!==false && (!q||s.no.includes(q)||s.name.includes(q)));
+  const el=document.getElementById('pk_grid'); if(!el)return;
+  if(!list.length){el.innerHTML=`<div class="empty" style="grid-column:1/-1">查無商品</div>`;return;}
+  el.innerHTML=list.map(s=>{
+    const inCart=(state.cart.find(c=>c.no===s.no)||{}).qty||0;
+    return `<div class="pickcard ${s.qty<=0?'out':''}" onclick="doPickItem('${s.no}')">
+      ${thumbHtml(s)}
+      ${inCart?`<span class="incart">×${inCart}</span>`:''}
+      <div class="pn">${s.name}</div>
+      <div class="pp"><span>${money(s.price)}</span><span style="color:${s.qty<=0?'var(--red)':'var(--muted)'}">剩 ${s.qty}</span></div>
+    </div>`;}).join('');
+}
+function doPickItem(no){ if(addToCart(no,1)){ toast('已加入'); renderPickGrid(); } }
 
 function openMemberAttach(){
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
@@ -1253,7 +1363,7 @@ function doNewMember(){
   const m={phone,name:val('nm_name')||'會員',tier:val('nm_tier'),
     disc:(+val('nm_disc')||95)/100,spent:0,joined:new Date().toISOString().slice(0,7).replace('-','.')};
   state.members.push(m);state.cartMember=m;
-  api('upsertMember',{member:m});
+  api('frcs_upsert_member',{p_member:m});
   closeModal();renderRegister();
   toast('已建立會員 '+m.name);
 }
@@ -1314,8 +1424,8 @@ function doCheckout(grand){
   state.txns=state.txns||[];
   state.txns.unshift({no:txnNo,time:nowHM(),items,total:grand,pay,member:state.cartMember?state.cartMember.name:null});
   const mem=state.cartMember;
-  api('checkout',{txn:{no:txnNo,date:today(),time:nowHM(),total:grand,pay,
-    member:mem?mem.name:'',memberPhone:mem?mem.phone:'',items}}).then(r=>{
+  api('frcs_checkout',S({p_txn:{no:txnNo,date:today(),time:nowHM(),total:grand,pay,
+    member:mem?mem.name:'',memberPhone:mem?mem.phone:'',items:items.map(c=>({no:c.no,name:c.name,price:c.price,qty:c.qty}))}})).then(r=>{
       if(r && r.queued) toast('已離線記錄,待網路恢復後上傳');
     });
 
@@ -1399,9 +1509,8 @@ function doPreFromCart(){
   const po={no,sku:c.no,qty:c.qty,price:+val('pf_price')||c.price,
     deposit:dep,stage:"收訂金",cust:val('pf_cust')||'—',createdAt:today()};
   state.preorders.push(po);
-  api('upsertPreorder',{preorder:po});
-  if(dep){const sale={date:today(),sku:c.no,qty:0,amt:dep,cost:0,note:'訂金'};
-    state.sales.push(sale);api('preorderFinal',{preorder:po,sale});}
+  api('frcs_upsert_preorder',S({p:po}));
+  if(dep){state.sales.push({date:today(),sku:c.no,qty:0,amt:dep,cost:0,note:'訂金 '+no});}
   closeModal();clearCart(false);toast('已建立預購單 '+no+(dep?' · 訂金 '+money(dep):''));
 }
 
@@ -1491,8 +1600,10 @@ function advancePreTrack(no){
     state.txns.unshift({no:'PO'+p.no.slice(-4),time:nowHM(),
       items:[{no:p.sku,name:st?st.name:p.sku,qty:p.qty,price:bal,cost:st?st.cost:0}],
       total:bal,pay:'預購尾款',member:p.cust});
+    if(st) st.qty-=p.qty;
     toast('尾款 '+money(bal)+' 入帳');
   } else { p.stage=next;toast(p.no+' → '+next); }
+  api('frcs_preorder_advance',{p_no:p.no,p_stage:next});
   renderPreTrack();
 }
 
@@ -1532,7 +1643,7 @@ function printLabels(){
 /* ---------------- 入庫 / 盤點 / 叫貨 ---------------- */
 function renderIntake(){
   const el=document.getElementById('intakeRecent');
-  const r=(state.intakeLog||[]).slice(0,8);
+  const r=(state.intakeLog||[]).filter(i=>i.date===today()).slice(0,8);
   el.innerHTML=r.length?r.map(i=>`<div class="card">
     <div class="row-between"><div><div class="style-no">${i.time} · ${i.no}</div>
       <div style="font-weight:700;font-size:13px">${i.name}</div></div>
@@ -1551,8 +1662,8 @@ function doIntake(){
   if(q<=0){toast('請填數量');return;}
   s.qty+=q;
   state.intakeLog=state.intakeLog||[];
-  state.intakeLog.unshift({time:nowHM(),no:s.no,name:s.name,qty:q});
-  api('intake',{sku:s.no,qty:q,name:s.name,date:today(),time:nowHM()});
+  state.intakeLog.unshift({date:today(),time:nowHM(),no:s.no,name:s.name,qty:q,kind:'intake'});
+  api('frcs_intake',S({p:{id:uuid(),sku:s.no,qty:q,date:today(),time:nowHM()}}));
   document.getElementById('ik_qty').value='1';
   renderIntake();toast('入庫 '+s.name+' +'+q);
 }
@@ -1575,9 +1686,9 @@ function saveCount(){
   let diff=0,changed=0;const counts=[];
   document.querySelectorAll('#countList input[data-no]').forEach(inp=>{
     const s=findStyle(inp.getAttribute('data-no'));const v=+inp.value||0;
-    if(v!==s.qty){diff+=Math.abs(v-s.qty);changed++;s.qty=v;counts.push({no:s.no,qty:v});}
+    if(v!==s.qty){diff+=Math.abs(v-s.qty);changed++;s.qty=v;counts.push({id:uuid(),no:s.no,qty:v});}
   });
-  if(counts.length)api('stocktake',{counts});
+  if(counts.length)api('frcs_stocktake',S({p_counts:counts,p_date:today()}));
   toast(changed?('盤點完成,'+changed+' 項調整 '+diff+' 件'):'盤點完成,無差異');
   renderCount();
 }
@@ -1603,60 +1714,144 @@ function copyRestock(){
   toast('叫貨清單已複製');
 }
 
-/* ---------------- 商品編輯(僅老闆) ---------------- */
-function openEditStyle(no){
-  const s=findStyle(no);if(!s)return;
-  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>編輯商品</h3><div class="sub">${s.no}</div>
-    <label class="fld">品名</label><input class="f" id="es_name" value="${s.name}">
-    <div class="grid2">
-      <div><label class="fld">進價 NT$</label><input class="f" id="es_cost" type="number" value="${s.cost}" inputmode="numeric"></div>
-      <div><label class="fld">售價 NT$</label><input class="f" id="es_price" type="number" value="${s.price}" inputmode="numeric"></div>
-    </div>
-    <div class="grid2">
-      <div><label class="fld">性別線</label><select class="f" id="es_gender">${state.genders.map(g=>`<option ${g===s.gender?'selected':''}>${g}</option>`).join('')}</select></div>
-      <div><label class="fld">品類</label><select class="f" id="es_cat">${state.cats.map(c=>`<option ${c===s.cat?'selected':''}>${c}</option>`).join('')}</select></div>
-    </div>
-    <label class="fld">安全庫存量</label><input class="f" id="es_low" type="number" value="${s.low}" inputmode="numeric">
-    <button class="btn" style="margin-top:16px" onclick="doEditStyle('${no}')">儲存</button>`);
+/* ---------------- 商品建檔 / 編輯 ---------------- */
+/* 新增和編輯共用同一張表單。
+   店員可以建商品、改品名售價圖片；進價欄只有老闆看得到、改得動（後端也只收老闆的）。 */
+let styleSel={gender:null,cat:null};
+let pendingPhoto=null, photoRemoved=false, editingNo=null;
+
+function nextStyleNo(){
+  const nums=state.styles.map(s=>parseInt(s.no,10)).filter(n=>!isNaN(n));
+  return nums.length?String(Math.max(...nums)+1):'';
 }
-function doEditStyle(no){
-  const s=findStyle(no);
-  s.name=val('es_name')||s.name;
-  s.cost=+val('es_cost')||0; s.price=+val('es_price')||0;
-  s.gender=val('es_gender'); s.cat=val('es_cat'); s.low=+val('es_low')||1;
-  api('upsertItem',{item:{no:s.no,name:s.name,cat:s.cat,gender:s.gender,cost:s.cost,price:s.price,low:s.low}});
-  closeModal();renderStyles();toast('已更新 '+s.name);
+function styleChips(group,list,cur){
+  return `<div class="chips" id="sc_${group}">${list.map(v=>
+    `<div class="chip ${cur===v?'on':''}" onclick="styleChip('${group}','${v}')">${v}</div>`).join('')}</div>`;
 }
-function openNewStyle(){
-  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>新增商品</h3><div class="sub">商品編號為唯一識別,即為條碼</div>
-    <label class="fld">商品編號</label><input class="f" id="ns_no" inputmode="numeric" placeholder="21501">
-    <label class="fld">品名</label><input class="f" id="ns_name" placeholder="顏染造型衫-黑">
-    <div class="grid2">
-      <div><label class="fld">進價 NT$</label><input class="f" id="ns_cost" type="number" inputmode="numeric"></div>
-      <div><label class="fld">售價 NT$</label><input class="f" id="ns_price" type="number" inputmode="numeric"></div>
-    </div>
-    <div class="grid2">
-      <div><label class="fld">性別線</label><select class="f" id="ns_gender">${state.genders.map(g=>`<option>${g}</option>`).join('')}</select></div>
-      <div><label class="fld">品類</label><select class="f" id="ns_cat">${state.cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
-    </div>
-    <div class="grid2">
-      <div><label class="fld">初始庫存</label><input class="f" id="ns_qty" type="number" value="0" inputmode="numeric"></div>
-      <div><label class="fld">安全量</label><input class="f" id="ns_low" type="number" value="1" inputmode="numeric"></div>
-    </div>
-    <button class="btn green" style="margin-top:16px" onclick="doNewStyle()">建立商品</button>`);
+function styleChip(group,v){
+  styleSel[group]=v;
+  document.querySelectorAll('#sc_'+group+' .chip').forEach(c=>c.classList.toggle('on',c.textContent.trim()===v));
 }
-function doNewStyle(){
-  const no=val('ns_no').trim();
+function styleMargin(){
+  const el=document.getElementById('st_margin');if(!el)return;
+  const cost=+(document.getElementById('st_cost')?.value||0), price=+(document.getElementById('st_price')?.value||0);
+  if(!price){el.innerHTML='填售價後這裡會算毛利';return;}
+  if(!canSeeCost()||!cost){el.innerHTML=`售價 ${money(price)}`;return;}
+  const m=price-cost, pct=Math.round(m/price*100), x=(price/cost).toFixed(1);
+  el.innerHTML=`毛利 <b class="${m<0?'bad':''}">${money(m)}</b> · 毛利率 <b class="${pct<30?'bad':''}">${pct}%</b> · ${x} 倍${pct<30?' · 低於三成':''}`;
+}
+function styleForm(s){
+  const isNew=!s;
+  const no=isNew?'':s.no;
+  styleSel={gender:isNew?null:s.gender, cat:isNew?null:s.cat};
+  editingNo=isNew?null:s.no;
+  pendingPhoto=null; photoRemoved=false;
+  const photo=isNew?'':(s.photo||'');
+  const nxt=isNew?nextStyleNo():'';
+  return `<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>${isNew?'新增商品':'編輯商品'}</h3>
+    <div class="sub">${isNew?'商品編號就是條碼,建好不能改':s.no+(s.active===false?' · 已下架':'')}</div>
+
+    <label class="fld">商品圖片 <span class="opt">· 選填,清單和收銀會顯示</span></label>
+    <div class="photo-box">
+      <div id="st_thumb">${photo?`<img class="thumb" src="${photo}" alt="">`:`<div class="thumb ph">NO<br>PHOTO</div>`}</div>
+      <div class="ops">
+        <input type="file" id="st_file_cam" accept="image/*" capture="environment" onchange="stylePhotoPicked(this)">
+        <input type="file" id="st_file_lib" accept="image/*" onchange="stylePhotoPicked(this)">
+        <button class="btn ghost sm" onclick="document.getElementById('st_file_cam').click()">📷 拍照</button>
+        <button class="btn ghost sm" onclick="document.getElementById('st_file_lib').click()">選圖片</button>
+        ${photo?`<button class="btn ghost sm" style="color:var(--red);border-color:var(--red)" onclick="stylePhotoRemove()">移除圖片</button>`:''}
+      </div>
+    </div>
+
+    ${isNew
+      ? `<label class="fld">商品編號</label>
+         <div style="display:flex;gap:6px">
+           <input class="f" id="st_no" inputmode="numeric" placeholder="${nxt||'21501'}" style="flex:1">
+           ${nxt?`<button class="btn ghost sm" style="width:auto;margin:0;white-space:nowrap" onclick="document.getElementById('st_no').value='${nxt}'">用 ${nxt}</button>`:''}
+         </div>`
+      : ''}
+    <label class="fld">品名</label><input class="f" id="st_name" value="${isNew?'':s.name.replace(/"/g,'&quot;')}" placeholder="顏染造型衫-黑">
+
+    <label class="fld">性別線</label>${styleChips('gender',state.genders,styleSel.gender)}
+    <label class="fld">品類</label>${styleChips('cat',state.cats,styleSel.cat)}
+
+    <div class="grid2">
+      ${canSeeCost()?`<div><label class="fld">進價 NT$ <span class="opt">· 每件</span></label><input class="f" id="st_cost" type="number" inputmode="numeric" value="${isNew?'':s.cost}" oninput="styleMargin()"></div>`:''}
+      <div><label class="fld">售價 NT$</label><input class="f" id="st_price" type="number" inputmode="numeric" value="${isNew?'':s.price}" oninput="styleMargin()"></div>
+    </div>
+    <div class="margin-line" id="st_margin"></div>
+
+    <div class="grid2">
+      ${isNew?`<div><label class="fld">初始庫存</label><input class="f" id="st_qty" type="number" value="0" inputmode="numeric"></div>`:''}
+      <div><label class="fld">安全量 <span class="opt">· 低於就進叫貨清單</span></label><input class="f" id="st_low" type="number" value="${isNew?1:s.low}" inputmode="numeric"></div>
+    </div>
+    <label class="fld">備註 <span class="opt">· 選填</span></label><input class="f" id="st_note" value="${isNew?'':(s.note||'').replace(/"/g,'&quot;')}" placeholder="尺寸、材質、廠商…">
+
+    <button class="btn green" id="st_save" style="margin-top:16px" onclick="saveStyle(${isNew})">${isNew?'建立商品':'儲存'}</button>
+    ${(!isNew && canSeeCost())
+      ? (s.active===false
+          ? `<button class="btn ghost sm" onclick="setStyleActive('${s.no}',true)">重新上架</button>`
+          : `<button class="btn ghost sm" style="color:var(--red);border-color:var(--red)" onclick="setStyleActive('${s.no}',false)">下架(清單不再顯示)</button>`)
+      : ''}`;
+}
+function stylePhotoPicked(inp){
+  const f=inp.files&&inp.files[0]; if(!f)return;
+  pendingPhoto=f; photoRemoved=false;
+  const url=URL.createObjectURL(f);
+  document.getElementById('st_thumb').innerHTML=`<img class="thumb" src="${url}" alt="">`;
+}
+function stylePhotoRemove(){
+  pendingPhoto=null; photoRemoved=true;
+  document.getElementById('st_thumb').innerHTML=`<div class="thumb ph">NO<br>PHOTO</div>`;
+}
+function openNewStyle(){ openModal(styleForm(null)); styleMargin(); setTimeout(()=>document.getElementById('st_no')?.focus(),100); }
+function openEditStyle(no){ const s=findStyle(no); if(!s)return; openModal(styleForm(s)); styleMargin(); }
+
+async function saveStyle(isNew){
+  const no=isNew?val('st_no'):editingNo;
   if(!no){toast('請填商品編號');return;}
-  if(findStyle(no)){toast('此編號已存在');return;}
-  const rec={no,name:val('ns_name')||'未命名',cat:val('ns_cat'),gender:val('ns_gender'),
-    cost:+val('ns_cost')||0,price:+val('ns_price')||0,qty:+val('ns_qty')||0,low:+val('ns_low')||1};
-  state.styles.push(rec);
-  api('upsertItem',{item:rec});
-  closeModal();renderStyles();toast('已建立商品');
+  if(isNew && findStyle(no)){toast('此編號已存在');return;}
+  const name=val('st_name'); if(!name){toast('請填品名');return;}
+  if(!styleSel.gender){toast('選一個性別線');return;}
+  if(!styleSel.cat){toast('選一個品類');return;}
+  const price=+val('st_price')||0; if(!price){toast('請填售價');return;}
+  const btn=document.getElementById('st_save'); btn.disabled=true; btn.textContent='儲存中…';
+
+  const existing=isNew?null:findStyle(no);
+  const rec={no, name, cat:styleSel.cat, gender:styleSel.gender, price, low:+val('st_low')||1, note:val('st_note')};
+  if(canSeeCost() && document.getElementById('st_cost')) rec.cost=+val('st_cost')||0;
+  if(isNew) rec.qty=+val('st_qty')||0;
+
+  /* 圖片先上傳再存主檔。上傳失敗不擋存檔,文字資料照存,圖之後再補 */
+  if(pendingPhoto){
+    try{ rec.photo=await uploadPhoto(no,pendingPhoto); }
+    catch(e){ toast('圖片上傳失敗:'+errMsg(e)+',先存文字資料'); }
+  } else if(photoRemoved){
+    rec.photo=''; removePhoto(no).catch(()=>{});
+  }
+
+  if(existing){
+    Object.assign(existing,{name:rec.name,cat:rec.cat,gender:rec.gender,price:rec.price,low:rec.low,note:rec.note});
+    if('cost' in rec) existing.cost=rec.cost;
+    if('photo' in rec) existing.photo=rec.photo;
+  } else {
+    state.styles.unshift({no,name:rec.name,cat:rec.cat,gender:rec.gender,cost:rec.cost||0,price,low:rec.low,
+      qty:rec.qty,photo:rec.photo||'',note:rec.note,active:true,elsewhere:[]});
+    if(rec.qty>0) state.intakeLog.unshift({date:today(),time:nowHM(),no,name:rec.name,qty:rec.qty,kind:'intake'});
+  }
+  api('frcs_upsert_item',S({p_item:rec}));
+  closeModal(); renderStyles();
+  toast(isNew?'已建立 '+rec.name:'已更新 '+rec.name);
 }
+function setStyleActive(no,on){
+  const s=findStyle(no); if(!s)return;
+  if(!on && s.qty>0 && !window.confirm(`${s.name} 還有 ${s.qty} 件庫存,確定下架?\n下架只是不顯示,庫存紀錄都還在。`))return;
+  s.active=on;
+  api('frcs_set_item_active',{p_no:no,p_active:on});
+  closeModal(); renderStyles(); toast(on?'已重新上架':'已下架');
+}
+function toggleInactive(){ state.showInactive=!state.showInactive; renderStyles(); }
 
 /* ---------------- CSV 匯入 ---------------- */
 function openImport(){
@@ -1665,31 +1860,33 @@ function openImport(){
     <div class="sub">欄位順序:商品編號, 商品名稱, 商品類別, 進價, 售價, 庫存</div>
     <textarea class="f" id="imp_csv" rows="8" placeholder="21497,顏染造型衫-淺灰,男上衣,520,1480,3"></textarea>
     <button class="btn" style="margin-top:14px" onclick="doImport()">匯入</button>
-    <div class="hint">「男上衣」會自動拆成 性別線=男、品類=上衣。可直接從 Google Sheets 複製貼上。</div>`);
+    <div class="hint">「男上衣」會自動拆成 性別線=男、品類=上衣。可直接從 Google Sheets 複製貼上。<br>
+    庫存欄有填就以它為準(寫成一筆盤點調整),留空則不動庫存。已有的編號會更新品名與價格。</div>`);
 }
 function parseCat(raw){
   raw=(raw||'').trim();
   let gender=state.genders.find(g=>raw.startsWith(g))||'男';
   let rest=raw.replace(gender,'');
-  const map={'上衣':'上衣','下身':'下身','下半身':'下身','外套':'外套'};
-  return {gender, cat:map[rest]||'上衣'};
+  const map={'上衣':'上衣','下身':'下身','下半身':'下身','外套':'外套','配件':'配件'};
+  return {gender, cat:map[rest]||(state.cats.includes(rest)?rest:'上衣')};
 }
 function doImport(){
   const raw=document.getElementById('imp_csv').value.trim();
   if(!raw){toast('請貼上 CSV');return;}
-  let added=0,updated=0,skipped=0;
+  let added=0,updated=0,skipped=0;const rows=[];
   raw.split(/\r?\n/).forEach(line=>{
-    const p=line.split(',').map(x=>x.trim());
-    if(p.length<3||!p[0]||isNaN(+p[0])){skipped++;return;}
+    const p=line.split(/[,\t]/).map(x=>x.trim());
+    if(p.length<2||!p[0]||isNaN(+p[0])){skipped++;return;}
     const {gender,cat}=parseCat(p[2]);
-    const rec={no:p[0],name:p[1]||'未命名',cat,gender,
-      cost:+p[3]||0,price:+p[4]||0,qty:+p[5]||0,low:1};
+    const rec={no:p[0],name:p[1]||'未命名',cat,gender,cost:+p[3]||0,price:+p[4]||0,low:1};
+    if(p[5]!==undefined && p[5]!=='') rec.qty=+p[5]||0;
+    rows.push(rec);
     const ex=findStyle(rec.no);
-    if(ex){Object.assign(ex,rec);updated++;}
-    else{state.styles.push(rec);added++;}
+    if(ex){Object.assign(ex,{name:rec.name,cat,gender,cost:rec.cost,price:rec.price}); if('qty' in rec) ex.qty=rec.qty; updated++;}
+    else{state.styles.push({...rec,qty:rec.qty||0,photo:'',note:'',active:true,elsewhere:[]});added++;}
   });
-  api('bulkUpsertItems',{items:state.styles.map(x=>({no:x.no,name:x.name,cat:x.cat,
-    gender:x.gender,cost:x.cost,price:x.price,qty:x.qty,low:x.low}))});
+  if(!rows.length){toast('沒有可匯入的列');return;}
+  api('frcs_bulk_upsert_items',S({p_items:rows}));
   closeModal();renderStyles();
   toast(`新增 ${added} · 更新 ${updated}${skipped?' · 略過 '+skipped:''}`);
 }
@@ -1751,12 +1948,12 @@ function advancePO(no){
   const idx=PO_STAGES.indexOf(p.stage);
   if(idx>=PO_STAGES.length-1)return;
   p.stage=PO_STAGES[idx+1];
-  api('upsertPurchase',{purchase:p});
+  api('frcs_upsert_purchase',S({p}));
   if(p.stage==='已付款'){
     const t=poTotals(p);
     const tp={no:'TP-'+p.no,who:p.vendor,amt:Math.round(t.total),cat:'進貨貨款'};
     state.topay.push(tp);
-    api('addTopay',{topay:tp});
+    api('frcs_add_topay',S({p:tp}));
     toast('已付款 · 已加入待匯款 '+money(t.total));
   } else toast(p.no+' → '+p.stage);
   renderPurchase();
@@ -1764,25 +1961,24 @@ function advancePO(no){
 function receivePO(no){
   const p=state.purchases.find(x=>x.no===no);if(!p)return;
   const t=poTotals(p);
+  if(!p.items.length){toast('這張單還沒有商品');return;}
   if(!window.confirm(`入倉 ${p.no}?\n${t.units} 件商品將建檔並加入庫存,成本含運費關稅攤提。`))return;
   let created=0,updated=0;
+  /* 畫面先更新;真正的成本、庫存由後端 frcs_receive_purchase 用同一條公式算 */
   p.items.forEach(i=>{
     const cost=Math.round(poUnitCost(p,i));
     const ex=findStyle(i.no);
-    if(ex){ ex.qty+=i.qty; ex.cost=cost; updated++; }
+    if(ex){ ex.qty+=i.qty; ex.cost=cost; ex.active=true; updated++; }
     else{
-      state.styles.push({no:i.no,name:i.name,cat:i.cat,gender:i.gender,
-        cost, price:i.price||Math.round(cost*2.8/10)*10, qty:i.qty, low:1});
+      state.styles.unshift({no:i.no,name:i.name,cat:i.cat,gender:i.gender,
+        cost, price:i.price||Math.round(cost*2.8/10)*10, qty:i.qty, low:1, photo:'', note:'', active:true, elsewhere:[]});
       created++;
     }
+    state.intakeLog.unshift({date:today(),time:nowHM(),no:i.no,name:i.name,qty:i.qty,kind:'receive'});
   });
   p.stage='已入倉';
   p.receivedAt=today();
-  api('receivePurchase',{purchase:p, items:p.items.map(i=>{
-    const st=findStyle(i.no);
-    return {no:i.no,name:i.name,cat:i.cat,gender:i.gender,
-      cost:Math.round(poUnitCost(p,i)), price:st?st.price:(i.price||0), qty:i.qty};
-  })});
+  api('frcs_receive_purchase',{p_no:p.no});
   toast(`入倉完成 · 新建 ${created} · 補貨 ${updated}`);
   renderPurchase();
   setTimeout(()=>{
@@ -1826,7 +2022,7 @@ function doNewPO(){
     rate:+val('po_rate')||1,freight:+val('po_freight')||0,duty:+val('po_duty')||0,
     stage:'已訂購',ordered:val('po_ordered')||today(),eta:val('po_eta')||'—',items:[]};
   state.purchases.unshift(po);
-  api('upsertPurchase',{purchase:po});
+  api('frcs_upsert_purchase',S({p:po}));
   closeModal();renderPurchase();toast('已建立 '+no+',請加入商品');
 }
 
@@ -1854,12 +2050,12 @@ function openEditPO(no){
 function savePOMeta(no){
   const p=state.purchases.find(x=>x.no===no);
   p.freight=+val('ep_freight')||0; p.duty=+val('ep_duty')||0; p.rate=+val('ep_rate')||p.rate;
-  api('upsertPurchase',{purchase:p});
+  api('frcs_upsert_purchase',S({p}));
   closeModal();renderPurchase();toast('已更新');
 }
 function delPOItem(no,idx){
   const p=state.purchases.find(x=>x.no===no);
-  p.items.splice(idx,1);api('upsertPurchase',{purchase:p});openEditPO(no);renderPurchase();
+  p.items.splice(idx,1);api('frcs_upsert_purchase',S({p}));openEditPO(no);renderPurchase();
 }
 function openAddPOItem(no){
   const p=state.purchases.find(x=>x.no===no);
@@ -1884,7 +2080,7 @@ function doAddPOItem(no){
   if(!n){toast('請填商品編號');return;}
   p.items.push({no:n,name:val('ai_name')||'未命名',cat:val('ai_cat'),gender:val('ai_gender'),
     unitFx:+val('ai_fx')||0,qty:+val('ai_qty')||1,price:+val('ai_price')||0});
-  api('upsertPurchase',{purchase:p});
+  api('frcs_upsert_purchase',S({p}));
   openEditPO(no);renderPurchase();toast('已加入');
 }
 function openImportPO(no){
@@ -1907,7 +2103,7 @@ function doImportPO(no){
     p.items.push({no:c[0],name:c[1]||'未命名',cat,gender,unitFx:+c[3]||0,qty:+c[4]||1,price:0});
     added++;
   });
-  api('upsertPurchase',{purchase:p});
+  api('frcs_upsert_purchase',S({p}));
   closeModal();renderPurchase();
   toast(`已匯入 ${added} 項${skipped?' · 略過 '+skipped:''}`);
 }
@@ -1933,8 +2129,8 @@ async function doTransfer(no){
   const src=s.elsewhere.find(e=>e.store===from);
   if(!src||q<=0){toast('數量錯誤');return;}
   if(q>src.qty){toast(from+' 僅剩 '+src.qty+' 件');return;}
-  const r=await api('transfer',{fromStore:from,toStore:state.store,sku:s.no,
-    name:s.name,qty:q,date:today(),note:val('tr_note')||''});
+  const r=await api('frcs_transfer',{p:{id:uuid(),fromStore:from,toStore:state.store,sku:s.no,
+    qty:q,date:today(),note:val('tr_note')||''}});
   if(r.ok===false && !r.queued){toast('調貨失敗:'+r.error);return;}
   s.qty+=q; src.qty-=q;
   if(src.qty<=0)s.elsewhere=s.elsewhere.filter(e=>e.store!==from);
@@ -2070,10 +2266,14 @@ function setAgeFilter(b){state.ageFilter=b;renderVelocity();}
 
 /* ---------------- 報表 ---------------- */
 function renderReport(){
-  document.getElementById('repMonth').textContent=new Date().toISOString().slice(0,7);
-  const rev=state.sales.reduce((a,b)=>a+b.amt,0);
-  const cogs=state.sales.reduce((a,b)=>a+(b.cost||0),0);
-  const exp=state.expenses.reduce((a,b)=>a+b.amt,0);
+  /* 只看本月;sales/expenses 從後端拿的是近 12 個月 */
+  const ym=today().slice(0,7);
+  document.getElementById('repMonth').textContent=ym;
+  const mSales=state.sales.filter(x=>String(x.date).startsWith(ym));
+  const mExp=state.expenses.filter(x=>String(x.date).startsWith(ym));
+  const rev=mSales.reduce((a,b)=>a+b.amt,0);
+  const cogs=mSales.reduce((a,b)=>a+(b.cost||0),0);
+  const exp=mExp.reduce((a,b)=>a+b.amt,0);
   const gross=rev-cogs;
   const net=gross-exp;
   document.getElementById('repRev').textContent=money(rev);
@@ -2086,7 +2286,7 @@ function renderReport(){
 
   const map={};state.styles.forEach(x=>map[x.no]=x);
   const mix={};
-  state.sales.forEach(sl=>{
+  mSales.forEach(sl=>{
     const st=map[sl.sku];if(!st)return;
     const gk='線·'+st.gender, ck='類·'+st.cat;
     mix[gk]=(mix[gk]||0)+sl.amt; mix[ck]=(mix[ck]||0)+sl.amt;
@@ -2100,7 +2300,7 @@ function renderReport(){
     || `<div class="empty" style="padding:16px 0">尚無銷售資料</div>`;
 
   const byCat={};
-  state.expenses.forEach(e=>byCat[e.cat]=(byCat[e.cat]||0)+e.amt);
+  mExp.forEach(e=>byCat[e.cat]=(byCat[e.cat]||0)+e.amt);
   const max=Math.max(...Object.values(byCat),1);
   document.getElementById('expBars').innerHTML=Object.entries(byCat)
     .sort((a,b)=>b[1]-a[1]).map(([k,v])=>
@@ -2108,8 +2308,8 @@ function renderReport(){
       <div class="track"><div class="fill" style="width:${v/max*100}%"></div></div>
       <div class="amt">${(v/1000).toFixed(0)}k</div></div>`).join('');
 
-  const all=[...state.sales.map(x=>({date:x.date,l:(map[x.sku]?.name||x.sku)+(x.note?' ('+x.note+')':''),v:x.amt,pos:1})),
-             ...state.expenses.map(e=>({date:e.date,l:e.cat+' '+e.who,v:-e.amt,pos:0}))]
+  const all=[...mSales.map(x=>({date:x.date,l:(map[x.sku]?.name||x.sku)+(x.note?' ('+x.note+')':''),v:x.amt,pos:1})),
+             ...mExp.map(e=>({date:e.date,l:e.cat+' '+e.who,v:-e.amt,pos:0}))]
     .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   document.getElementById('ledger').innerHTML=all.map(r=>
     `<div class="lr"><span class="l">${shortDate(r.date)} ${r.l}</span>
@@ -2121,17 +2321,16 @@ function renderReport(){
 async function renderRollup(){
   const box=document.getElementById('rollupBox');
   if(!box)return;
-  if(!API_URL || !state.stores || state.stores.length<2){box.innerHTML='';return;}
+  if(!sb || !canSeeCost() || !state.stores || state.stores.length<2){box.innerHTML='';return;}
   box.innerHTML='<h2 class="sec">全店合併 ALL STORES</h2><div class="hint">載入中…</div>';
   try{
-    const j=await apiPost({action:'rollup'}, 30000);
-    if(!j.ok)throw new Error(j.error);
-    const agg=j.data;
+    const agg=await rpc('frcs_rollup',{});
     const codes=Object.keys(agg);
     if(!codes.length){box.innerHTML='';return;}
     let tR=0,tC=0,tE=0;
     const rows=codes.map(c=>{
-      const a=agg[c];tR+=a.rev;tC+=a.cogs;tE+=a.exp;
+      const a={rev:Number(agg[c].rev)||0,cogs:Number(agg[c].cogs)||0,exp:Number(agg[c].exp)||0};
+      tR+=a.rev;tC+=a.cogs;tE+=a.exp;
       const net=a.rev-a.cogs-a.exp;
       return `<div class="lr"><span class="l">${c}</span>
         <span style="color:${net>=0?'var(--green)':'var(--red)'}">${money(net)}</span></div>`;
@@ -2169,8 +2368,8 @@ function doReturn(){
   const type=state.picks.rtype||'退貨';
   state.returns=state.returns||[];
   state.returns.unshift({time:nowHM(),type,name:st?st.name:s.sku,qty:s.qty,amt:s.amt,reason:val('rt_reason')});
-  api('return',{sku:s.sku,qty:s.qty,type,name:st?st.name:s.sku,amt:s.amt,
-    cost:s.cost||0,reason:val('rt_reason'),date:today(),time:nowHM()});
+  api('frcs_return',S({p:{id:uuid(),sku:s.sku,qty:s.qty,type,name:st?st.name:s.sku,amt:s.amt,
+    reason:val('rt_reason'),date:today(),time:nowHM()}}));
   if(type==='退貨'){
     state.sales.push({date:today(),sku:s.sku,qty:-s.qty,amt:-s.amt,cost:-(s.cost||0),note:'退貨'});
     toast('已退貨,庫存回補、營收沖銷');
@@ -2200,9 +2399,9 @@ document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='
 function saveExpense(){
   const amt=+val('expAmt')||0;
   if(!amt){toast('請填金額');return;}
-  const ex={date:today(),cat:val('expCat'),amt,who:val('expWho')||'—',note:val('expNote')||'—'};
+  const ex={id:uuid(),date:today(),cat:val('expCat'),amt,who:val('expWho')||'—',note:val('expNote')||'—'};
   state.expenses.push(ex);
-  api('addExpense',{expense:ex});
+  api('frcs_add_expense',S({p:ex}));
   document.getElementById('expAmt').value='';
   document.getElementById('expWho').value='';
   document.getElementById('expNote').value='';
@@ -2224,7 +2423,7 @@ function payTopay(no){
   const t=state.topay.find(x=>x.no===no);if(!t)return;
   const ex={date:today(),cat:t.cat,amt:t.amt,who:t.who,note:'待匯款結清'};
   state.expenses.push(ex);
-  api('payTopay',{no,expense:ex});
+  api('frcs_pay_topay',{p_no:no});
   state.topay=state.topay.filter(x=>x.no!==no);
   toast('已匯款並入帳 '+money(t.amt));
   renderTopay();
@@ -2246,9 +2445,9 @@ function saveSale(){
   const price=+val('salePrice')||s.price;
   if(s.qty<qty){toast('庫存不足,僅剩 '+s.qty);return;}
   s.qty-=qty;
-  const sale={date:today(),sku:s.no,qty,amt:qty*price,cost:s.cost*qty,note:'補記'};
+  const sale={id:uuid(),date:today(),sku:s.no,qty,amt:qty*price,cost:s.cost*qty,note:'補記'};
   state.sales.push(sale);
-  api('manualSale',{sale});
+  api('frcs_manual_sale',S({p_sale:sale}));
   toast('已補記 '+s.name+' ×'+qty);
 }
 
@@ -2286,18 +2485,16 @@ renderModebar();
 setMode('pos');
 /* 開機:若上次離線留下待補送資料,橫幅立刻紅色警示 */
 if(pendingQueue.length) setSync('error');
-else setSync(API_URL?'syncing':'offline');
+else setSync(sb?'syncing':'offline');
 
-if(API_URL){
-  cloudLoad(true).then(ok=>{ if(ok){renderStoreBar();refreshCurrentView();} });
-} else {
-  setTimeout(()=>toast('點上方橫幅設定雲端連線'),800);
-}
-/* 偵測本機錢箱程式:有跑才顯示「開錢箱」鈕,iPad 上不會出現 */
-drawerPing().then(ok=>{
-  const b=document.getElementById('drawerBtn');
-  if(b && ok) b.style.display='';
-});
+/* 有上次的登入 session 就直接進去;沒有就停在登入畫面 */
+(async()=>{
+  if(!sb){ showLock(true); setSync('offline'); return; }
+  const {data:{session}} = await sb.auth.getSession();
+  if(session) await enterApp();
+  else { showLock(true); setSync('offline'); }
+  sb.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ showLock(true); setSync('offline'); } });
+})();
 
 window.addEventListener('online', ()=>{ toast('網路已恢復'); flushQueue(); });
 window.addEventListener('offline', ()=>{ setSync('error'); lastError='裝置目前沒有網路'; });
