@@ -305,6 +305,9 @@
   .margin-line b{color:var(--green);}
   .margin-line b.bad{color:var(--red);}
   .fld .opt{color:var(--muted);text-transform:none;letter-spacing:0;}
+  .sheet h2.sec{margin-top:14px;}
+  table.mtx td input.f{font-size:12px;}
+  .lr .l{flex:1;min-width:0;padding-right:8px;}
 </style>
 </head>
 <body>
@@ -346,6 +349,7 @@
       <div class="scanbox">
         <span class="scanic">▤</span>
         <input class="f scanin" id="regScan" placeholder="掃描商品條碼加入購物車" onkeydown="if(event.key==='Enter')scanToCart()" autocomplete="off">
+        <button class="btn ghost sm cambtn" style="width:auto;margin:0;padding:7px 9px;display:none" onclick="openCamScan('cart')">📷</button>
       </div>
       <div class="row-between" style="margin-top:4px">
         <button class="btn ghost sm" style="width:auto;margin:0" onclick="openPickItem()">＋ 手動選品</button>
@@ -422,6 +426,7 @@
       <div class="scanbox" style="margin-top:10px">
         <span class="scanic">▤</span>
         <input class="f scanin" id="ikScan" placeholder="掃描條碼帶入商品" onkeydown="if(event.key==='Enter')scanIntake()" autocomplete="off">
+        <button class="btn ghost sm cambtn" style="width:auto;margin:0;padding:7px 9px;display:none" onclick="openCamScan('intake')">📷</button>
       </div>
       <label class="fld">商品</label>
       <select class="f" id="ik_no"></select>
@@ -534,7 +539,8 @@
 
     <!-- 報表 -->
     <div class="view" id="v-report">
-      <h2 class="sec">本月損益 P&L · <span id="repMonth" class="mono"></span></h2>
+      <h2 class="sec">損益 P&L · <span id="repMonth" class="mono"></span></h2>
+      <div class="filterbar" id="repMonthBar" style="margin:0 0 12px"></div>
       <div class="kpi">
         <div class="cell"><div class="lab">營收 Revenue</div><div class="val" id="repRev">—</div></div>
         <div class="cell"><div class="lab">進貨成本 COGS</div><div class="val" id="repCogs">—</div></div>
@@ -543,7 +549,15 @@
         <div class="cell"><div class="lab">淨利 Net</div><div class="val pos" id="repNet">—</div></div>
       </div>
       <div id="rollupBox"></div>
-      <h2 class="sec">營收結構 REVENUE MIX</h2>
+      <h2 class="sec">近六個月 TREND</h2>
+      <div id="trendBars"></div>
+      <h2 class="sec" style="margin-top:16px">暢銷排行 TOP 10</h2>
+      <div class="hint">依這個月賣出件數排,小字是賣最多的規格。</div>
+      <div id="topSell" style="margin-top:8px"></div>
+      <h2 class="sec" style="margin-top:16px">售罄率 SELL-THROUGH</h2>
+      <div class="hint">這個月賣出 ÷（賣出＋現在還剩）。八成以上綠色,五成以下黃色。</div>
+      <div id="sellRate" style="margin-top:8px"></div>
+      <h2 class="sec" style="margin-top:16px">營收結構 REVENUE MIX</h2>
       <div id="mixBars"></div>
       <h2 class="sec" style="margin-top:16px">開銷分類 BY CATEGORY</h2>
       <div id="expBars"></div>
@@ -785,6 +799,7 @@ async function cloudLoad(silent){
     state.topay     = (d.topay||[]).map(t=>({...t, amt:Number(t.amt)||0}));
     state.returns   = (d.returns||[]).map(r=>({...r, qty:Number(r.qty)||0, amt:Number(r.amt)||0}));
     state.intakeLog = (d.intakeLog||[]).map(i=>({...i, qty:Number(i.qty)||0}));
+    state.dayClose  = d.dayClose||null;
     /* 店員帳號永遠是店員畫面 */
     if(!state.account || state.account.role!=='owner') state.role='staff';
     setSync('ok');
@@ -805,6 +820,7 @@ function normItem(i){
   return {no:String(i.no), name:i.name, cat:i.cat, gender:i.gender,
     cost:Number(i.cost)||0, price:Number(i.price)||0,
     qty:Number(i.qty)||0, low:Number(i.low)||1,
+    styleNo:i.styleNo||String(i.no), size:i.size||'', color:i.color||'',
     photo:i.photo||'', note:i.note||'', active:i.active!==false,
     elsewhere:(i.elsewhere||[]).filter(e=>Number(e.qty)>0)};
 }
@@ -1158,45 +1174,59 @@ function renderStyles(){
   renderFilters();
   const el=document.getElementById('styleList');
   const q=(document.getElementById('styleSearch')?.value||'').trim();
-  const list=state.styles.filter(s=>
-    (s.active!==false || state.showInactive) &&
-    (state.filter.cat==='全部'||s.cat===state.filter.cat) &&
-    (state.filter.gender==='全部'||s.gender===state.filter.gender) &&
-    (!q||s.no.includes(q)||s.name.includes(q)));
-  const hidden=state.styles.filter(s=>s.active===false).length;
-  const foot=(canSeeCost()&&hidden)?`<div class="hint" style="text-align:center;margin-top:6px;cursor:pointer" onclick="toggleInactive()">${state.showInactive?'隱藏已下架':'顯示 '+hidden+' 項已下架'}</div>`:'';
-  if(!list.length){el.innerHTML=`<div class="empty">${q?'查無符合商品':'此分類沒有商品'}</div>`+foot;return;}
-  el.innerHTML=list.map(s=>{
-    const margin=s.price-s.cost;
-    const mpct=s.price?Math.round(margin/s.price*100):0;
-    return `<div class="card" style="${s.active===false?'opacity:.5':''}">
+  const all=styleGroups(true);
+  const groups=all.filter(g=>
+    (g.active || state.showInactive) &&
+    (state.filter.cat==='全部'||g.cat===state.filter.cat) &&
+    (state.filter.gender==='全部'||g.gender===state.filter.gender) &&
+    (!q||g.styleNo.includes(q)||g.name.includes(q)||g.skus.some(s=>s.no.includes(q))));
+  const hidden=all.filter(g=>!g.active).length;
+  const foot=(canSeeCost()&&hidden)?`<div class="hint" style="text-align:center;margin-top:6px;cursor:pointer" onclick="toggleInactive()">${state.showInactive?'隱藏已下架':'顯示 '+hidden+' 款已下架'}</div>`:'';
+  if(!groups.length){el.innerHTML=`<div class="empty">${q?'查無符合商品':'此分類沒有商品'}</div>`+foot;return;}
+  el.innerHTML=groups.map(g=>{
+    const margin=g.price-g.cost;
+    const mpct=g.price?Math.round(margin/g.price*100):0;
+    const act=g.skus.filter(s=>s.active!==false);
+    const lowCnt=act.filter(s=>s.qty<=s.low).length;
+    const elsewhere={};
+    act.forEach(s=>(s.elsewhere||[]).forEach(e=>{elsewhere[e.store]=(elsewhere[e.store]||0)+e.qty;}));
+    const ewKeys=Object.keys(elsewhere);
+    return `<div class="card" style="${!g.active?'opacity:.5':''}">
       <div class="style-head withimg">
-        ${thumbHtml(s)}
+        ${thumbHtml(g)}
         <div style="flex:1;min-width:0">
-          <div class="style-no">${s.no}${s.active===false?' · 已下架':''}</div>
-          <div class="style-name">${s.name}</div>
+          <div class="style-no">${g.styleNo}${!g.active?' · 已下架':''}${hasVariants(g)?' · '+act.length+' 個規格':''}</div>
+          <div class="style-name">${g.name}</div>
           <div class="tags-row">
-            <span class="tag gender">${s.gender}</span>
-            <span class="tag cat">${s.cat}</span>
+            <span class="tag gender">${g.gender}</span>
+            <span class="tag cat">${g.cat}</span>
+            ${lowCnt&&g.qty>0?`<span class="tag" style="color:var(--amber);border-color:var(--amber)">${lowCnt} 個規格要補</span>`:''}
           </div>
         </div>
         <div style="text-align:right">
-          <div class="mono" style="font-size:17px;font-weight:700">${money(s.price)}</div>
-          ${canSeeCost()?`<div class="costline">進價 ${money(s.cost)}</div>
+          <div class="mono" style="font-size:17px;font-weight:700">${money(g.price)}</div>
+          ${canSeeCost()?`<div class="costline">進價 ${money(g.cost)}</div>
             <div class="costline" style="color:var(--green)">毛利 ${money(margin)} · ${mpct}%</div>`:''}
-          <div class="mono" style="font-size:13px;margin-top:4px;color:${s.qty===0?'var(--red)':(s.qty<=s.low?'var(--amber)':'var(--ink)')}">
-            庫存 ${s.qty}</div>
-          ${(s.elsewhere&&s.elsewhere.length)?s.elsewhere.map(e=>
-            `<div class="costline" style="color:var(--prussian)">${e.store} 有 ${e.qty} 件</div>`).join(''):''}
+          <div class="mono" style="font-size:13px;margin-top:4px;color:${g.qty===0?'var(--red)':(lowCnt?'var(--amber)':'var(--ink)')}">
+            庫存 ${g.qty}</div>
+          ${ewKeys.map(k=>`<div class="costline" style="color:var(--prussian)">${k} 有 ${elsewhere[k]} 件</div>`).join('')}
         </div>
       </div>
+      ${hasVariants(g)?matrixHtml(g):''}
       <div class="btn-row">
-        ${(s.elsewhere&&s.elsewhere.length)?`<button class="btn ghost sm" onclick="openTransfer('${s.no}')">調貨</button>`:''}
-        <button class="btn ghost sm" onclick="openEditStyle('${s.no}')">${canSeeCost()?'編輯 · 成本':'編輯'}</button>
+        ${ewKeys.length?`<button class="btn ghost sm" onclick="${hasVariants(g)?`openVariantList('${g.styleNo}','transfer')`:`openTransfer('${act[0].no}')`}">調貨</button>`:''}
+        <button class="btn ghost sm" onclick="openStyleHistory('${g.styleNo}')">異動</button>
+        <button class="btn ghost sm" onclick="openEditStyle('${g.styleNo}')">${canSeeCost()?'編輯 · 成本':'編輯'}</button>
       </div>
     </div>`;
   }).join('')+foot;
 }
+
+/* ================= 款式建檔 / 編輯 ================= */
+let sf=null;           // 表單狀態
+let styleSel={gender:null,cat:null};
+let pendingPhoto=null, photoRemoved=false;
+const SIZE_PRESET=['XS','S','M','L','XL','XXL','F'];
 
 /* ================= POS / REGISTER ================= */
 /* 電話一律正規化成純數字字串再比對。
@@ -1223,16 +1253,16 @@ function addToCart(no,qty){
   const s=findStyle(no);if(!s)return false;
   const ex=state.cart.find(c=>c.no===s.no);
   const inCart=ex?ex.qty:0;
-  if(inCart+qty>s.qty){toast('庫存不足:'+s.name+' 僅剩 '+s.qty);return false;}
+  if(inCart+qty>s.qty){toast('庫存不足:'+skuLabel(s)+' 僅剩 '+s.qty);return false;}
   if(ex)ex.qty+=qty;
-  else state.cart.push({no:s.no,name:s.name,price:s.price,cost:s.cost,qty});
+  else state.cart.push({no:s.no,name:skuLabel(s),price:s.price,listPrice:s.price,cost:s.cost,qty});
   renderRegister();return true;
 }
 function scanToCart(){
   const inp=document.getElementById('regScan');const code=inp.value.trim();inp.value='';
   const s=findStyle(code);
   if(!s){toast('查無此商品編號:'+code);inp.focus();return;}
-  if(addToCart(s.no,1))toast('加入 '+s.name);
+  if(addToCart(s.no,1))toast('加入 '+skuLabel(s));
   inp.focus();
 }
 function cartQtyStep(no,d){
@@ -1270,10 +1300,12 @@ function renderRegister(){
   const cl=document.getElementById('cartList');
   if(!state.cart.length){cl.innerHTML=`<div class="empty">購物車是空的<br>掃描條碼或手動選品加入</div>`;}
   else{
-    cl.innerHTML=state.cart.map(c=>`<div class="cartrow">
+    cl.innerHTML=state.cart.map(c=>{
+      const off=c.listPrice&&c.price<c.listPrice;
+      return `<div class="cartrow">
       ${thumbHtml(findStyle(c.no)||{},'sm')}
       <div class="ci"><div class="cn">${c.name}</div>
-        <div class="cv">${c.no} · ${money(c.price)}</div></div>
+        <div class="cv" onclick="openItemPrice('${c.no}')" style="cursor:pointer">${c.no} · ${off?`<s>${money(c.listPrice)}</s> <span style="color:var(--red)">${money(c.price)}</span>`:money(c.price)} ✎</div></div>
       <div class="qstep">
         <button onclick="cartQtyStep('${c.no}',-1)">−</button>
         <span class="qn">${c.qty}</span>
@@ -1281,14 +1313,16 @@ function renderRegister(){
       </div>
       <div class="cp">${(c.price*c.qty).toLocaleString()}</div>
       <button class="del" onclick="cartDel('${c.no}')">✕</button>
-    </div>`).join('');
+    </div>`;}).join('');
   }
 
   const t=cartTotal();
   const tt=document.getElementById('cartTotals');
   if(!state.cart.length){tt.innerHTML='';}
   else{
+    const itemOff=state.cart.reduce((a,c)=>a+((c.listPrice||c.price)-c.price)*c.qty,0);
     let rows=`<div class="tr"><span>小計</span><span>${money(t.sub)}</span></div>`;
+    if(itemOff>0)rows+=`<div class="tr"><span class="disc">單品折讓</span><span class="disc">已含 −${itemOff.toLocaleString()}</span></div>`;
     if(t.memOff)rows+=`<div class="tr"><span class="disc">會員折扣</span><span class="disc">−${t.memOff.toLocaleString()}</span></div>`;
     if(t.manOff)rows+=`<div class="tr"><span class="disc">折扣 ${Math.round(state.cartDiscount*100)}%</span><span class="disc">−${t.manOff.toLocaleString()}</span></div>`;
     rows+=`<div class="tr grand"><span>應收</span><span>${money(t.grand)}</span></div>`;
@@ -1297,10 +1331,11 @@ function renderRegister(){
   const cb=document.getElementById('checkoutBtn');
   if(cb)cb.style.opacity=state.cart.length?'1':'.4';
 }
+/* 單品改價:直接填單價,或按折數 */
 
 function openPickItem(){
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>手動選品</h3><div class="sub">點一下加一件,再點再加</div>
+    <h3>手動選品</h3><div class="sub">點一下加一件;有尺寸顏色的會再問規格</div>
     <div class="scanbox" style="border-color:var(--line);margin-top:8px">
       <span class="scanic">⌕</span>
       <input class="f scanin" id="pk_q" placeholder="搜尋編號或品名" oninput="renderPickGrid()" autocomplete="off">
@@ -1311,19 +1346,25 @@ function openPickItem(){
 }
 function renderPickGrid(){
   const q=(document.getElementById('pk_q')?.value||'').trim();
-  const list=state.styles.filter(s=>s.active!==false && (!q||s.no.includes(q)||s.name.includes(q)));
+  const list=styleGroups(false).filter(g=>!q||g.styleNo.includes(q)||g.name.includes(q)||g.skus.some(s=>s.no.includes(q)));
   const el=document.getElementById('pk_grid'); if(!el)return;
   if(!list.length){el.innerHTML=`<div class="empty" style="grid-column:1/-1">查無商品</div>`;return;}
-  el.innerHTML=list.map(s=>{
-    const inCart=(state.cart.find(c=>c.no===s.no)||{}).qty||0;
-    return `<div class="pickcard ${s.qty<=0?'out':''}" onclick="doPickItem('${s.no}')">
-      ${thumbHtml(s)}
+  el.innerHTML=list.map(g=>{
+    const inCart=state.cart.filter(c=>g.skus.some(s=>s.no===c.no)).reduce((a,c)=>a+c.qty,0);
+    const v=hasVariants(g);
+    return `<div class="pickcard ${g.qty<=0?'out':''}" onclick="doPickItem('${g.styleNo}')">
+      ${thumbHtml(g)}
       ${inCart?`<span class="incart">×${inCart}</span>`:''}
-      <div class="pn">${s.name}</div>
-      <div class="pp"><span>${money(s.price)}</span><span style="color:${s.qty<=0?'var(--red)':'var(--muted)'}">剩 ${s.qty}</span></div>
+      <div class="pn">${g.name}</div>
+      <div class="pp"><span>${money(g.price)}</span><span style="color:${g.qty<=0?'var(--red)':'var(--muted)'}">${v?g.skus.filter(s=>s.active!==false).length+' 規格 · ':''}剩 ${g.qty}</span></div>
     </div>`;}).join('');
 }
-function doPickItem(no){ if(addToCart(no,1)){ toast('已加入'); renderPickGrid(); } }
+function doPickItem(styleNo){
+  const g=findGroup(styleNo); if(!g)return;
+  if(!hasVariants(g)){ if(addToCart(g.skus.find(s=>s.active!==false).no,1)){ toast('已加入'); renderPickGrid(); } return; }
+  openVariantList(styleNo,'cart');
+}
+/* 規格清單:mode = cart(加入購物車) / transfer(調貨) */
 
 function openMemberAttach(){
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
@@ -1374,11 +1415,11 @@ function renderMembers(){
     .sort((a,b)=>b.spent-a.spent);
   const el=document.getElementById('memberList');
   if(!list.length){el.innerHTML=`<div class="empty">${q?'查無符合會員':'尚無會員'}</div>`;return;}
-  el.innerHTML=list.map(m=>`<div class="mcard">
+  el.innerHTML=list.map(m=>`<div class="mcard" style="cursor:pointer" onclick="openMemberDetail('${m.phone}')">
     <div class="row-between">
       <div><div class="mn" style="font-weight:700">${m.name} <span class="tier">${m.tier}</span></div>
         <div class="mmeta" style="font-family:'Courier New',monospace;font-size:11px;color:var(--muted);margin-top:2px">
-          ${m.phone} · 入會 ${m.joined}</div></div>
+          ${m.phone} · 入會 ${m.joined||'—'}</div></div>
       <div style="text-align:right">
         <div class="mono" style="font-size:16px;font-weight:700">NT$${m.spent.toLocaleString()}</div>
         <div class="mmeta" style="font-size:10px;color:var(--gilt)">${Math.round(m.disc*100)}折</div></div>
@@ -1422,7 +1463,7 @@ function doCheckout(grand){
     state.sales.push({date:today(),sku:c.no,qty:c.qty,amt:c.price*c.qty,cost:c.cost*c.qty});});
   if(state.cartMember)state.cartMember.spent+=grand;
   state.txns=state.txns||[];
-  state.txns.unshift({no:txnNo,time:nowHM(),items,total:grand,pay,member:state.cartMember?state.cartMember.name:null});
+  state.txns.unshift({no:txnNo,time:nowHM(),items,total:grand,pay,member:state.cartMember?state.cartMember.name:null,memberPhone:state.cartMember?state.cartMember.phone:null});
   const mem=state.cartMember;
   api('frcs_checkout',S({p_txn:{no:txnNo,date:today(),time:nowHM(),total:grand,pay,
     member:mem?mem.name:'',memberPhone:mem?mem.phone:'',items:items.map(c=>({no:c.no,name:c.name,price:c.price,qty:c.qty}))}})).then(r=>{
@@ -1492,27 +1533,34 @@ function openPreFromCart(){
   if(!state.cart.length){toast('購物車是空的');return;}
   if(state.cart.length>1){toast('預購單一次一件,請只留一項');return;}
   const c=state.cart[0];
+  const m=state.cartMember;
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
     <h3>轉為預購單</h3><div class="sub">${c.name} ×${c.qty}</div>
     <div class="grid2">
       <div><label class="fld">單價</label><input class="f" id="pf_price" type="number" value="${c.price}" inputmode="numeric"></div>
       <div><label class="fld">訂金</label><input class="f" id="pf_dep" type="number" inputmode="numeric" placeholder="0"></div>
     </div>
-    <label class="fld">客戶</label>
-    <input class="f" id="pf_cust" value="${state.cartMember?state.cartMember.name:''}" placeholder="姓名或電話">
+    <label class="fld">會員電話 <span class="opt">· 有會員就綁,到貨好找人</span></label>
+    <input class="f" id="pf_phone" type="tel" inputmode="numeric" value="${m?m.phone:''}" placeholder="09xxxxxxxx" oninput="pfLookup()">
+    <div class="hint" id="pf_found">${m?'會員 '+m.name:''}</div>
+    <label class="fld">客戶稱呼</label>
+    <input class="f" id="pf_cust" value="${m?m.name:''}" placeholder="姓名或稱呼">
     <button class="btn gilt" style="margin-top:16px" onclick="doPreFromCart()">建立預購單並收訂金</button>
     <div class="hint">預購不扣現貨庫存,走「收訂金→到貨→出貨→收尾款」流程。</div>`);
 }
 function doPreFromCart(){
   const c=state.cart[0];const no="PO-"+Math.floor(1000+Math.random()*9000);
   const dep=+val('pf_dep')||0;
+  const phone=normPhone(val('pf_phone'));
   const po={no,sku:c.no,qty:c.qty,price:+val('pf_price')||c.price,
-    deposit:dep,stage:"收訂金",cust:val('pf_cust')||'—',createdAt:today()};
+    deposit:dep,stage:"收訂金",cust:val('pf_cust')||(phone||'—'),memberPhone:phone||null,createdAt:today()};
   state.preorders.push(po);
   api('frcs_upsert_preorder',S({p:po}));
   if(dep){state.sales.push({date:today(),sku:c.no,qty:0,amt:dep,cost:0,note:'訂金 '+no});}
   closeModal();clearCart(false);toast('已建立預購單 '+no+(dep?' · 訂金 '+money(dep):''));
 }
+
+/* ================= 會員:點開看紀錄、改資料 ================= */
 
 function openDiscount(){
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
@@ -1527,22 +1575,38 @@ function openDiscount(){
 function setDiscount(p){state.cartDiscount=Math.max(0,Math.min(100,p))/100;closeModal();renderRegister();toast(p?('折扣 '+p+'%'):'已取消折扣');}
 
 function renderTxns(){
-  const txns=state.txns||[];
+  const all=state.txns||[];
+  const txns=all.filter(t=>!t.voided);
   const total=txns.reduce((a,t)=>a+t.total,0);
-  const cost=txns.reduce((a,t)=>a+t.items.reduce((x,i)=>x+i.cost*i.qty,0),0);
+  const cost=txns.reduce((a,t)=>a+t.items.reduce((x,i)=>x+(i.cost||0)*i.qty,0),0);
+  const byPay={};
+  txns.forEach(t=>{byPay[t.pay||'其他']=(byPay[t.pay||'其他']||0)+t.total;});
   let kpi=`<div class="cell"><div class="lab">今日筆數</div><div class="val">${txns.length}</div></div>
     <div class="cell"><div class="lab">今日營收</div><div class="val">${money(total)}</div></div>`;
   if(canSeeCost())kpi+=`<div class="cell"><div class="lab">成本</div><div class="val">${money(cost)}</div></div>
     <div class="cell"><div class="lab">毛利</div><div class="val pos">${money(total-cost)}</div></div>`;
-  document.getElementById('txnSummary').innerHTML=`<div class="kpi">${kpi}</div>`;
+  const pays=Object.entries(byPay).sort((a,b)=>b[1]-a[1]);
+  const payRows=pays.length?`<div class="ledger" style="margin-bottom:12px">${pays.map(([k,v])=>`<div class="lr"><span class="l">${k}</span><span>${money(v)}</span></div>`).join('')}</div>`:'';
+  const dc=state.dayClose;
+  const closeBox=dc
+    ? `<div class="card done"><div class="row-between">
+         <div><div class="style-no">已日結 · ${shortDate(dc.closedOn)}</div>
+           <div style="font-weight:700;font-size:13px">現金應有 ${money(dc.cashExpected)} · 實點 ${money(dc.cashCounted)}</div>
+           ${dc.note?`<div class="style-meta">${dc.note}</div>`:''}</div>
+         <div class="mono" style="font-size:18px;font-weight:700;color:${+dc.diff===0?'var(--green)':'var(--red)'}">${+dc.diff>0?'+':''}${(+dc.diff).toLocaleString()}</div>
+       </div><button class="btn ghost sm" style="margin-top:8px" onclick="openDayClose()">重新日結</button></div>`
+    : `<button class="btn" onclick="openDayClose()">日結 · 對錢箱</button>`;
+  document.getElementById('txnSummary').innerHTML=`<div class="kpi">${kpi}</div>${payRows}${closeBox}`;
   const el=document.getElementById('txnList');
-  if(!txns.length){el.innerHTML=`<div class="empty">今天還沒有交易</div>`;return;}
-  el.innerHTML=txns.map(t=>`<div class="card">
+  if(!all.length){el.innerHTML=`<div class="empty">今天還沒有交易</div>`;return;}
+  const canVoid=canSeeCost()&&!dc;
+  el.innerHTML=`<h2 class="sec" style="margin-top:18px">明細</h2>`+all.map(t=>`<div class="card" style="${t.voided?'opacity:.45':''}">
     <div class="row-between">
-      <div style="flex:1;min-width:0"><div class="style-no">${t.no} · ${t.time}${t.member?' · '+t.member:''}</div>
+      <div style="flex:1;min-width:0"><div class="style-no">${t.no} · ${t.time}${t.member?' · '+t.member:''}${t.voided?' · <span style="color:var(--red)">已作廢'+(t.voidReason?' · '+t.voidReason:'')+'</span>':''}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:2px">${t.items.map(i=>i.name+'×'+i.qty).join('、')}</div></div>
-      <div style="text-align:right"><div class="mono" style="font-size:16px;font-weight:700">${money(t.total)}</div>
-        <div class="style-meta">${t.pay}</div></div>
+      <div style="text-align:right"><div class="mono" style="font-size:16px;font-weight:700;${t.voided?'text-decoration:line-through':''}">${money(t.total)}</div>
+        <div class="style-meta">${t.pay}</div>
+        ${canVoid&&!t.voided?`<button class="btn ghost sm" style="width:auto;margin-top:6px;padding:5px 9px;color:var(--red);border-color:var(--red)" onclick="openVoidTxn('${t.no}')">作廢</button>`:''}</div>
     </div></div>`).join('');
 }
 function nowHM(){const d=new Date();return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
@@ -1610,9 +1674,9 @@ function advancePreTrack(no){
 /* ---------------- labels ---------------- */
 function renderLabels(){
   const el=document.getElementById('lblPickList');
-  el.innerHTML=state.styles.map(s=>`<label class="lblpick">
+  el.innerHTML=state.styles.filter(s=>s.active!==false).map(s=>`<label class="lblpick">
     <input type="checkbox" class="lblchk" data-no="${s.no}" ${s.qty>0?'checked':''}>
-    <span style="flex:1">${s.name}</span>
+    <span style="flex:1">${skuLabel(s)}</span>
     <span style="color:var(--muted)">${s.no}</span>
     <span style="width:34px;text-align:right">×${s.qty}</span>
   </label>`).join('');
@@ -1626,7 +1690,7 @@ function printLabels(){
     const s=findStyle(chk.getAttribute('data-no'));
     return `<div class="lblcard">
       <div class="lname">${s.name}</div>
-      <div class="ln">${s.gender}${s.cat}</div>
+      <div class="ln">${variantLabel(s)?variantLabel(s)+' · ':''}${s.gender}${s.cat}</div>
       <svg class="bc" data-code="${s.no}"></svg>
       <div class="ln">${money(s.price)}</div>
     </div>`;
@@ -1654,7 +1718,7 @@ function scanIntake(){
   const inp=document.getElementById('ikScan');const s=findStyle(inp.value.trim());inp.value='';
   if(!s){toast('查無此商品編號');inp.focus();return;}
   document.getElementById('ik_no').value=s.no;
-  toast('已帶入 '+s.name);inp.focus();
+  toast('已帶入 '+skuLabel(s));inp.focus();
 }
 function doIntake(){
   const s=findStyle(val('ik_no'));if(!s){toast('請選商品');return;}
@@ -1669,18 +1733,21 @@ function doIntake(){
 }
 function fillIntakeSelect(){
   const sel=document.getElementById('ik_no');
-  if(sel)sel.innerHTML=state.styles.map(s=>`<option value="${s.no}">${s.no} ${s.name}</option>`).join('');
+  if(sel)sel.innerHTML=state.styles.filter(s=>s.active!==false).map(s=>`<option value="${s.no}">${s.no} ${skuLabel(s)}</option>`).join('');
   renderIntake();
 }
 
 function renderCount(){
   const el=document.getElementById('countList');
-  el.innerHTML=state.styles.map(s=>`<div class="cntrow">
-    <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">${s.name}</div>
-      <div class="style-no">${s.no} · 帳面 ${s.qty}</div></div>
-    <input class="f" style="width:70px;padding:7px;text-align:center" type="number" inputmode="numeric"
-      data-no="${s.no}" value="${s.qty}">
-  </div>`).join('');
+  const groups=styleGroups(false);
+  el.innerHTML=groups.map(g=>`<div style="margin-bottom:10px">
+    <div class="style-no" style="margin-bottom:4px">${g.styleNo} · ${g.name}</div>
+    ${g.skus.filter(s=>s.active!==false).map(s=>`<div class="cntrow">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">${variantLabel(s)||g.name}</div>
+        <div class="style-no">${s.no} · 帳面 ${s.qty}</div></div>
+      <input class="f" style="width:70px;padding:7px;text-align:center" type="number" inputmode="numeric"
+        data-no="${s.no}" value="${s.qty}">
+    </div>`).join('')}</div>`).join('');
 }
 function saveCount(){
   let diff=0,changed=0;const counts=[];
@@ -1695,12 +1762,12 @@ function saveCount(){
 
 function renderLow(){
   const el=document.getElementById('lowList');
-  const items=state.styles.filter(s=>s.qty<=s.low);
+  const items=state.styles.filter(s=>s.active!==false&&s.qty<=s.low);
   if(!items.length){el.innerHTML=`<div class="empty">庫存充足</div>`;return;}
   el.innerHTML=items.map(s=>`<div class="card ${s.qty===0?'':'pending'}">
     <div class="row-between">
       <div style="flex:1;min-width:0"><div class="style-no">${s.no}</div>
-        <div style="font-weight:700;font-size:14px">${s.name}</div>
+        <div style="font-weight:700;font-size:14px">${skuLabel(s)}</div>
         <div class="style-meta">${s.gender}${s.cat}</div></div>
       <div style="text-align:right"><div class="mono" style="font-size:20px;color:${s.qty===0?'var(--red)':'var(--amber)'}">${s.qty}</div>
         <div class="style-meta">安全量 ${s.low}</div></div>
@@ -1708,8 +1775,8 @@ function renderLow(){
 }
 function copyRestock(){
   const lines=['【FRCS 叫貨清單】'+today()];
-  state.styles.filter(s=>s.qty<=s.low).forEach(s=>
-    lines.push(`${s.no} ${s.name} — 剩 ${s.qty}`));
+  state.styles.filter(s=>s.active!==false&&s.qty<=s.low).forEach(s=>
+    lines.push(`${s.no} ${skuLabel(s)} — 剩 ${s.qty}`));
   navigator.clipboard?.writeText(lines.join('\n'));
   toast('叫貨清單已複製');
 }
@@ -1717,11 +1784,9 @@ function copyRestock(){
 /* ---------------- 商品建檔 / 編輯 ---------------- */
 /* 新增和編輯共用同一張表單。
    店員可以建商品、改品名售價圖片；進價欄只有老闆看得到、改得動（後端也只收老闆的）。 */
-let styleSel={gender:null,cat:null};
-let pendingPhoto=null, photoRemoved=false, editingNo=null;
 
 function nextStyleNo(){
-  const nums=state.styles.map(s=>parseInt(s.no,10)).filter(n=>!isNaN(n));
+  const nums=state.styles.map(s=>parseInt(s.styleNo||s.no,10)).filter(n=>!isNaN(n)&&n<100000);
   return nums.length?String(Math.max(...nums)+1):'';
 }
 function styleChips(group,list,cur){
@@ -1740,17 +1805,21 @@ function styleMargin(){
   const m=price-cost, pct=Math.round(m/price*100), x=(price/cost).toFixed(1);
   el.innerHTML=`毛利 <b class="${m<0?'bad':''}">${money(m)}</b> · 毛利率 <b class="${pct<30?'bad':''}">${pct}%</b> · ${x} 倍${pct<30?' · 低於三成':''}`;
 }
-function styleForm(s){
-  const isNew=!s;
-  const no=isNew?'':s.no;
-  styleSel={gender:isNew?null:s.gender, cat:isNew?null:s.cat};
-  editingNo=isNew?null:s.no;
+function styleForm(g){
+  const isNew=!g;
+  const act=isNew?[]:g.skus.filter(s=>s.active!==false);
+  styleSel={gender:isNew?null:g.gender, cat:isNew?null:g.cat};
   pendingPhoto=null; photoRemoved=false;
-  const photo=isNew?'':(s.photo||'');
+  sf={isNew, styleNo:isNew?'':g.styleNo, g,
+      colors:isNew?[]:[...new Set(act.map(s=>s.color).filter(Boolean))],
+      sizes: isNew?[]:sortSizes([...new Set(act.map(s=>s.size).filter(Boolean))]),
+      assign:{}, init:{}};
+  const photo=isNew?'':(g.photo||'');
   const nxt=isNew?nextStyleNo():'';
+  const priceLocked=!isNew && !canSeeCost();
   return `<button class="xclose" onclick="closeModal()">✕</button>
     <h3>${isNew?'新增商品':'編輯商品'}</h3>
-    <div class="sub">${isNew?'商品編號就是條碼,建好不能改':s.no+(s.active===false?' · 已下架':'')}</div>
+    <div class="sub">${isNew?'款式編號建好不能改;有尺寸顏色的話每個規格會有自己的條碼':g.styleNo+(!g.active?' · 已下架':'')}</div>
 
     <label class="fld">商品圖片 <span class="opt">· 選填,清單和收銀會顯示</span></label>
     <div class="photo-box">
@@ -1765,34 +1834,48 @@ function styleForm(s){
     </div>
 
     ${isNew
-      ? `<label class="fld">商品編號</label>
+      ? `<label class="fld">款式編號</label>
          <div style="display:flex;gap:6px">
-           <input class="f" id="st_no" inputmode="numeric" placeholder="${nxt||'21501'}" style="flex:1">
-           ${nxt?`<button class="btn ghost sm" style="width:auto;margin:0;white-space:nowrap" onclick="document.getElementById('st_no').value='${nxt}'">用 ${nxt}</button>`:''}
+           <input class="f" id="st_no" inputmode="numeric" placeholder="${nxt||'21501'}" style="flex:1" oninput="sfRenderSpec()">
+           ${nxt?`<button class="btn ghost sm" style="width:auto;margin:0;white-space:nowrap" onclick="document.getElementById('st_no').value='${nxt}';sfRenderSpec()">用 ${nxt}</button>`:''}
          </div>`
       : ''}
-    <label class="fld">品名</label><input class="f" id="st_name" value="${isNew?'':s.name.replace(/"/g,'&quot;')}" placeholder="顏染造型衫-黑">
+    <label class="fld">品名</label><input class="f" id="st_name" value="${isNew?'':g.name.replace(/"/g,'&quot;')}" placeholder="顏染造型衫">
 
     <label class="fld">性別線</label>${styleChips('gender',state.genders,styleSel.gender)}
     <label class="fld">品類</label>${styleChips('cat',state.cats,styleSel.cat)}
 
     <div class="grid2">
-      ${canSeeCost()?`<div><label class="fld">進價 NT$ <span class="opt">· 每件</span></label><input class="f" id="st_cost" type="number" inputmode="numeric" value="${isNew?'':s.cost}" oninput="styleMargin()"></div>`:''}
-      <div><label class="fld">售價 NT$</label><input class="f" id="st_price" type="number" inputmode="numeric" value="${isNew?'':s.price}" oninput="styleMargin()"></div>
+      ${canSeeCost()?`<div><label class="fld">進價 NT$ <span class="opt">· 每件</span></label><input class="f" id="st_cost" type="number" inputmode="numeric" value="${isNew?'':g.cost}" oninput="styleMargin()"></div>`:''}
+      <div><label class="fld">售價 NT$${priceLocked?' <span class="opt">· 改價限老闆</span>':''}</label><input class="f" id="st_price" type="number" inputmode="numeric" value="${isNew?'':g.price}" oninput="styleMargin()" ${priceLocked?'disabled':''}></div>
     </div>
     <div class="margin-line" id="st_margin"></div>
 
-    <div class="grid2">
-      ${isNew?`<div><label class="fld">初始庫存</label><input class="f" id="st_qty" type="number" value="0" inputmode="numeric"></div>`:''}
-      <div><label class="fld">安全量 <span class="opt">· 低於就進叫貨清單</span></label><input class="f" id="st_low" type="number" value="${isNew?1:s.low}" inputmode="numeric"></div>
-    </div>
-    <label class="fld">備註 <span class="opt">· 選填</span></label><input class="f" id="st_note" value="${isNew?'':(s.note||'').replace(/"/g,'&quot;')}" placeholder="尺寸、材質、廠商…">
+    <label class="fld">安全量 <span class="opt">· 每個規格低於這個數就進叫貨清單</span></label>
+    <input class="f" id="st_low" type="number" value="${isNew?1:g.low}" inputmode="numeric">
+    <label class="fld">備註 <span class="opt">· 選填</span></label><input class="f" id="st_note" value="${isNew?'':(g.note||'').replace(/"/g,'&quot;')}" placeholder="材質、廠商…">
 
-    <button class="btn green" id="st_save" style="margin-top:16px" onclick="saveStyle(${isNew})">${isNew?'建立商品':'儲存'}</button>
+    <h2 class="sec" style="margin-top:18px">規格 尺寸 × 顏色</h2>
+    <div class="hint">都留空 = 單一規格,一個條碼。有填的話每個尺寸顏色各一個條碼,編號自動接在款式編號後面。</div>
+    <label class="fld">顏色</label>
+    <div class="chips" id="sf_colors"></div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <input class="f" id="sf_color_in" placeholder="黑、白、炭灰…" onkeydown="if(event.key==='Enter'){event.preventDefault();sfAddColor();}">
+      <button class="btn ghost sm" style="width:auto;margin:0;white-space:nowrap" onclick="sfAddColor()">＋ 加顏色</button>
+    </div>
+    <label class="fld">尺寸</label>
+    <div class="chips" id="sf_sizes"></div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <input class="f" id="sf_size_in" placeholder="自訂,如 28、30" onkeydown="if(event.key==='Enter'){event.preventDefault();sfAddSize();}">
+      <button class="btn ghost sm" style="width:auto;margin:0;white-space:nowrap" onclick="sfAddSize()">＋ 加尺寸</button>
+    </div>
+    <div id="sf_matrix" style="margin-top:10px"></div>
+
+    <button class="btn green" id="st_save" style="margin-top:16px" onclick="saveStyle()">${isNew?'建立商品':'儲存'}</button>
     ${(!isNew && canSeeCost())
-      ? (s.active===false
-          ? `<button class="btn ghost sm" onclick="setStyleActive('${s.no}',true)">重新上架</button>`
-          : `<button class="btn ghost sm" style="color:var(--red);border-color:var(--red)" onclick="setStyleActive('${s.no}',false)">下架(清單不再顯示)</button>`)
+      ? (!g.active
+          ? `<button class="btn ghost sm" onclick="setStyleActive('${g.styleNo}',true)">重新上架</button>`
+          : `<button class="btn ghost sm" style="color:var(--red);border-color:var(--red)" onclick="setStyleActive('${g.styleNo}',false)">整款下架(清單不再顯示)</button>`)
       : ''}`;
 }
 function stylePhotoPicked(inp){
@@ -1805,53 +1888,64 @@ function stylePhotoRemove(){
   pendingPhoto=null; photoRemoved=true;
   document.getElementById('st_thumb').innerHTML=`<div class="thumb ph">NO<br>PHOTO</div>`;
 }
-function openNewStyle(){ openModal(styleForm(null)); styleMargin(); setTimeout(()=>document.getElementById('st_no')?.focus(),100); }
-function openEditStyle(no){ const s=findStyle(no); if(!s)return; openModal(styleForm(s)); styleMargin(); }
+function openNewStyle(){ openModal(styleForm(null)); styleMargin(); sfRenderSpec(); setTimeout(()=>document.getElementById('st_no')?.focus(),100); }
+function openEditStyle(styleNo){ const g=findGroup(styleNo); if(!g)return; openModal(styleForm(g)); styleMargin(); sfRenderSpec(); }
 
-async function saveStyle(isNew){
-  const no=isNew?val('st_no'):editingNo;
-  if(!no){toast('請填商品編號');return;}
-  if(isNew && findStyle(no)){toast('此編號已存在');return;}
+async function saveStyle(){
+  const isNew=sf.isNew;
+  const styleNo=isNew?val('st_no'):sf.styleNo;
+  if(!styleNo){toast('請填款式編號');return;}
+  if(isNew && state.styles.some(s=>(s.styleNo||s.no)===styleNo||s.no===styleNo)){toast('此編號已存在');return;}
   const name=val('st_name'); if(!name){toast('請填品名');return;}
   if(!styleSel.gender){toast('選一個性別線');return;}
   if(!styleSel.cat){toast('選一個品類');return;}
-  const price=+val('st_price')||0; if(!price){toast('請填售價');return;}
+  const priceEl=document.getElementById('st_price');
+  const price=+(priceEl.value||0); if(!priceEl.disabled && !price){toast('請填售價');return;}
+  const cells=sfCells();
+  const dup=cells.find(x=>state.styles.some(s=>s.no===x.no&&(s.styleNo||s.no)!==styleNo));
+  if(dup){toast('條碼 '+dup.no+' 已被別的商品用掉');return;}
   const btn=document.getElementById('st_save'); btn.disabled=true; btn.textContent='儲存中…';
 
-  const existing=isNew?null:findStyle(no);
-  const rec={no, name, cat:styleSel.cat, gender:styleSel.gender, price, low:+val('st_low')||1, note:val('st_note')};
-  if(canSeeCost() && document.getElementById('st_cost')) rec.cost=+val('st_cost')||0;
-  if(isNew) rec.qty=+val('st_qty')||0;
-
-  /* 圖片先上傳再存主檔。上傳失敗不擋存檔,文字資料照存,圖之後再補 */
+  const pStyle={styleNo, name, cat:styleSel.cat, gender:styleSel.gender, low:+val('st_low')||1, note:val('st_note')};
+  if(!priceEl.disabled) pStyle.price=price;
+  if(canSeeCost() && document.getElementById('st_cost')) pStyle.cost=+val('st_cost')||0;
   if(pendingPhoto){
-    try{ rec.photo=await uploadPhoto(no,pendingPhoto); }
+    try{ pStyle.photo=await uploadPhoto(styleNo,pendingPhoto); }
     catch(e){ toast('圖片上傳失敗:'+errMsg(e)+',先存文字資料'); }
-  } else if(photoRemoved){
-    rec.photo=''; removePhoto(no).catch(()=>{});
-  }
+  } else if(photoRemoved){ pStyle.photo=''; removePhoto(styleNo).catch(()=>{}); }
+  const pSkus=cells.map(x=>({no:x.no,size:x.z||null,color:x.c||null,qty:sf.init[x.no]||0}));
 
-  if(existing){
-    Object.assign(existing,{name:rec.name,cat:rec.cat,gender:rec.gender,price:rec.price,low:rec.low,note:rec.note});
-    if('cost' in rec) existing.cost=rec.cost;
-    if('photo' in rec) existing.photo=rec.photo;
-  } else {
-    state.styles.unshift({no,name:rec.name,cat:rec.cat,gender:rec.gender,cost:rec.cost||0,price,low:rec.low,
-      qty:rec.qty,photo:rec.photo||'',note:rec.note,active:true,elsewhere:[]});
-    if(rec.qty>0) state.intakeLog.unshift({date:today(),time:nowHM(),no,name:rec.name,qty:rec.qty,kind:'intake'});
-  }
-  api('frcs_upsert_item',S({p_item:rec}));
+  /* 本機先更新 */
+  const g=sf.g;
+  const oldPhoto=g?g.photo:'';
+  const base={name,cat:styleSel.cat,gender:styleSel.gender,low:pStyle.low,note:pStyle.note,
+    price:('price' in pStyle)?pStyle.price:(g?g.price:0), cost:('cost' in pStyle)?pStyle.cost:(g?g.cost:0),
+    photo:('photo' in pStyle)?pStyle.photo:oldPhoto, active:true};
+  const keep=new Set(pSkus.map(x=>x.no));
+  state.styles.forEach(s=>{ if((s.styleNo||s.no)===styleNo && !keep.has(s.no)) s.active=false; });
+  pSkus.forEach(x=>{
+    const ex=state.styles.find(s=>s.no===x.no);
+    if(ex) Object.assign(ex,base,{styleNo,size:x.size||'',color:x.color||''});
+    else{
+      state.styles.unshift({no:x.no,styleNo,size:x.size||'',color:x.color||'',...base,qty:x.qty,elsewhere:[]});
+      if(x.qty>0) state.intakeLog.unshift({date:today(),time:nowHM(),no:x.no,name,qty:x.qty,kind:'intake'});
+    }
+  });
+  api('frcs_save_style',S({p_style:pStyle,p_skus:pSkus}));
   closeModal(); renderStyles();
-  toast(isNew?'已建立 '+rec.name:'已更新 '+rec.name);
+  toast(isNew?'已建立 '+name+(pSkus.length>1?' · '+pSkus.length+' 個規格':''):'已更新 '+name);
 }
-function setStyleActive(no,on){
-  const s=findStyle(no); if(!s)return;
-  if(!on && s.qty>0 && !window.confirm(`${s.name} 還有 ${s.qty} 件庫存,確定下架?\n下架只是不顯示,庫存紀錄都還在。`))return;
-  s.active=on;
-  api('frcs_set_item_active',{p_no:no,p_active:on});
+function setStyleActive(styleNo,on){
+  const g=findGroup(styleNo); if(!g)return;
+  if(!on && g.qty>0 && !window.confirm(`${g.name} 還有 ${g.qty} 件庫存,確定下架?\n下架只是不顯示,庫存紀錄都還在。`))return;
+  state.styles.forEach(s=>{ if((s.styleNo||s.no)===styleNo) s.active=on; });
+  api('frcs_set_style_active',{p_style_no:styleNo,p_active:on});
   closeModal(); renderStyles(); toast(on?'已重新上架':'已下架');
 }
 function toggleInactive(){ state.showInactive=!state.showInactive; renderStyles(); }
+
+/* 最近異動 */
+const KIND_LABEL={sale:'售出',return:'退回',intake:'入庫',receive:'採購入倉',count:'盤點調整',transfer_out:'調出',transfer_in:'調入',manual:'補記銷售',void:'作廢回補'};
 
 /* ---------------- CSV 匯入 ---------------- */
 function openImport(){
@@ -1883,7 +1977,7 @@ function doImport(){
     rows.push(rec);
     const ex=findStyle(rec.no);
     if(ex){Object.assign(ex,{name:rec.name,cat,gender,cost:rec.cost,price:rec.price}); if('qty' in rec) ex.qty=rec.qty; updated++;}
-    else{state.styles.push({...rec,qty:rec.qty||0,photo:'',note:'',active:true,elsewhere:[]});added++;}
+    else{state.styles.push({...rec,styleNo:rec.no,size:'',color:'',qty:rec.qty||0,photo:'',note:'',active:true,elsewhere:[]});added++;}
   });
   if(!rows.length){toast('沒有可匯入的列');return;}
   api('frcs_bulk_upsert_items',S({p_items:rows}));
@@ -1970,7 +2064,7 @@ function receivePO(no){
     const ex=findStyle(i.no);
     if(ex){ ex.qty+=i.qty; ex.cost=cost; ex.active=true; updated++; }
     else{
-      state.styles.unshift({no:i.no,name:i.name,cat:i.cat,gender:i.gender,
+      state.styles.unshift({no:i.no,styleNo:i.no,size:'',color:'',name:i.name,cat:i.cat,gender:i.gender,
         cost, price:i.price||Math.round(cost*2.8/10)*10, qty:i.qty, low:1, photo:'', note:'', active:true, elsewhere:[]});
       created++;
     }
@@ -2113,7 +2207,7 @@ function openTransfer(no){
   const s=findStyle(no);if(!s||!s.elsewhere||!s.elsewhere.length)return;
   const opts=s.elsewhere.map(e=>`<option value="${e.store}">${e.store}(有 ${e.qty} 件)</option>`).join('');
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>調貨</h3><div class="sub">${s.name} · ${s.no}</div>
+    <h3>調貨</h3><div class="sub">${skuLabel(s)} · ${s.no}</div>
     <label class="fld">從哪間店調</label>
     <select class="f" id="tr_from">${opts}</select>
     <label class="fld">調來 ${state.store} 幾件</label>
@@ -2218,7 +2312,7 @@ function renderVelocity(){
       <div class="row-between">
         <div style="flex:1;min-width:0">
           <div class="style-no">${s.no}</div>
-          <div style="font-weight:700;font-size:14px">${s.name}</div>
+          <div style="font-weight:700;font-size:14px">${skuLabel(s)}</div>
           <div class="style-meta">${s.gender}${s.cat} · 最後入庫 ${shortDate(s.lastIn)}</div>
         </div>
         <div style="text-align:right">
@@ -2252,7 +2346,7 @@ function renderVelocity(){
       <div class="row-between">
         <div style="flex:1;min-width:0">
           <div class="style-no">${s.no}</div>
-          <div style="font-weight:700;font-size:14px">${s.name}</div>
+          <div style="font-weight:700;font-size:14px">${skuLabel(s)}</div>
           <div class="style-meta">${s.gender}${s.cat} · ${shortDate(s.firstIn)} → ${shortDate(s.out)}</div>
         </div>
         <div style="text-align:right">
@@ -2266,25 +2360,66 @@ function setAgeFilter(b){state.ageFilter=b;renderVelocity();}
 
 /* ---------------- 報表 ---------------- */
 function renderReport(){
-  /* 只看本月;sales/expenses 從後端拿的是近 12 個月 */
-  const ym=today().slice(0,7);
+  const months=monthList(6);
+  const ym=state.repMonth||months[0];
   document.getElementById('repMonth').textContent=ym;
-  const mSales=state.sales.filter(x=>String(x.date).startsWith(ym));
-  const mExp=state.expenses.filter(x=>String(x.date).startsWith(ym));
+  document.getElementById('repMonthBar').innerHTML=months.map(m=>
+    `<div class="fchip ${m===ym?'on':''}" onclick="setRepMonth('${m}')">${m.slice(2).replace('-','/')}</div>`).join('');
+  const inM=(x,m)=>String(x.date).startsWith(m);
+  const mSales=state.sales.filter(x=>inM(x,ym));
+  const mExp=state.expenses.filter(x=>inM(x,ym));
   const rev=mSales.reduce((a,b)=>a+b.amt,0);
   const cogs=mSales.reduce((a,b)=>a+(b.cost||0),0);
   const exp=mExp.reduce((a,b)=>a+b.amt,0);
-  const gross=rev-cogs;
-  const net=gross-exp;
+  const gross=rev-cogs, net=gross-exp;
   document.getElementById('repRev').textContent=money(rev);
   document.getElementById('repCogs').textContent=money(cogs);
   document.getElementById('repExp').textContent=money(exp);
-  const g=document.getElementById('repGross');
-  g.textContent=money(gross); g.className='val '+(gross>=0?'pos':'neg');
-  const n=document.getElementById('repNet');
-  if(n){n.textContent=money(net); n.className='val '+(net>=0?'pos':'neg');}
+  const g=document.getElementById('repGross'); g.textContent=money(gross); g.className='val '+(gross>=0?'pos':'neg');
+  const n=document.getElementById('repNet'); n.textContent=money(net); n.className='val '+(net>=0?'pos':'neg');
 
+  /* 六個月趨勢 */
+  const trend=months.slice().reverse().map(m=>{
+    const s=state.sales.filter(x=>inM(x,m)), e=state.expenses.filter(x=>inM(x,m));
+    const r=s.reduce((a,b)=>a+b.amt,0), c=s.reduce((a,b)=>a+(b.cost||0),0), x=e.reduce((a,b)=>a+b.amt,0);
+    return {m, rev:r, net:r-c-x};
+  });
+  const tMax=Math.max(...trend.map(t=>t.rev),1);
+  document.getElementById('trendBars').innerHTML=trend.map(t=>
+    `<div class="barline" style="cursor:pointer" onclick="setRepMonth('${t.m}')"><div class="nm" style="${t.m===ym?'color:var(--ink);font-weight:700':''}">${t.m.slice(2).replace('-','/')}</div>
+      <div class="track"><div class="fill" style="width:${t.rev/tMax*100}%;background:${t.m===ym?'var(--ink)':'var(--prussian)'}"></div></div>
+      <div class="amt" style="width:110px">${(t.rev/1000).toFixed(1)}k${canSeeCost()?` <span style="color:${t.net>=0?'var(--green)':'var(--red)'}">淨 ${(t.net/1000).toFixed(1)}k</span>`:''}</div></div>`).join('');
+
+  /* 暢銷排行(本月,按款式) */
   const map={};state.styles.forEach(x=>map[x.no]=x);
+  const byStyle={};
+  mSales.filter(x=>x.qty>0).forEach(sl=>{
+    const st=map[sl.sku]; const k=st?(st.styleNo||st.no):sl.sku;
+    const b=byStyle[k]||(byStyle[k]={name:st?st.name:sl.sku,qty:0,amt:0,variants:{}});
+    b.qty+=sl.qty; b.amt+=sl.amt;
+    if(st&&variantLabel(st)) b.variants[variantLabel(st)]=(b.variants[variantLabel(st)]||0)+sl.qty;
+  });
+  const top=Object.values(byStyle).sort((a,b)=>b.qty-a.qty||b.amt-a.amt).slice(0,10);
+  const topMax=Math.max(...top.map(t=>t.qty),1);
+  document.getElementById('topSell').innerHTML=top.length?top.map((t,i)=>{
+    const vs=Object.entries(t.variants).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>k+' '+v).join('、');
+    return `<div class="barline"><div class="nm" style="width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)">${i+1}. ${t.name}</div>
+      <div class="track"><div class="fill" style="width:${t.qty/topMax*100}%;background:var(--gilt)"></div></div>
+      <div class="amt" style="width:84px">${t.qty} 件 · ${(t.amt/1000).toFixed(1)}k</div></div>${vs?`<div class="hint" style="margin:-4px 0 6px 110px">${vs}</div>`:''}`;}).join('')
+    :`<div class="empty" style="padding:16px 0">這個月還沒有銷售</div>`;
+
+  /* 售罄率:本月賣出 ÷ (本月賣出 + 現在還剩) */
+  const rates=Object.entries(byStyle).map(([k,b])=>{
+    const g=findGroup(k); const left=g?g.qty:0; const rate=b.qty/(b.qty+left);
+    return {name:b.name,sold:b.qty,left,rate};
+  }).sort((a,b)=>b.rate-a.rate||b.sold-a.sold).slice(0,10);
+  document.getElementById('sellRate').innerHTML=rates.length?rates.map(r=>
+    `<div class="barline"><div class="nm" style="width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)">${r.name}</div>
+      <div class="track"><div class="fill" style="width:${r.rate*100}%;background:${r.rate>=.8?'var(--green)':r.rate>=.5?'var(--prussian)':'var(--amber)'}"></div></div>
+      <div class="amt" style="width:84px">${Math.round(r.rate*100)}% · 剩 ${r.left}</div></div>`).join('')
+    :`<div class="empty" style="padding:16px 0">有銷售後才算得出來</div>`;
+
+  /* 營收結構 */
   const mix={};
   mSales.forEach(sl=>{
     const st=map[sl.sku];if(!st)return;
@@ -2306,16 +2441,20 @@ function renderReport(){
     .sort((a,b)=>b[1]-a[1]).map(([k,v])=>
     `<div class="barline"><div class="nm">${k}</div>
       <div class="track"><div class="fill" style="width:${v/max*100}%"></div></div>
-      <div class="amt">${(v/1000).toFixed(0)}k</div></div>`).join('');
+      <div class="amt">${(v/1000).toFixed(0)}k</div></div>`).join('')
+    || `<div class="empty" style="padding:16px 0">這個月還沒記開銷</div>`;
 
-  const all=[...mSales.map(x=>({date:x.date,l:(map[x.sku]?.name||x.sku)+(x.note?' ('+x.note+')':''),v:x.amt,pos:1})),
-             ...mExp.map(e=>({date:e.date,l:e.cat+' '+e.who,v:-e.amt,pos:0}))]
+  const all=[...mSales.map(x=>({date:x.date,l:skuLabel(map[x.sku])||x.sku,v:x.amt,pos:1,note:x.note})),
+             ...mExp.map(e=>({date:e.date,l:e.cat+' '+(e.who||''),v:-e.amt,pos:0}))]
     .sort((a,b)=>String(b.date).localeCompare(String(a.date)));
   document.getElementById('ledger').innerHTML=all.map(r=>
-    `<div class="lr"><span class="l">${shortDate(r.date)} ${r.l}</span>
-      <span style="color:${r.pos?'var(--green)':'var(--red)'}">${r.pos?'+':''}${r.v.toLocaleString()}</span></div>`).join('');
+    `<div class="lr"><span class="l">${shortDate(r.date)} ${r.l}${r.note?' ('+r.note+')':''}</span>
+      <span style="color:${r.pos?'var(--green)':'var(--red)'}">${r.pos?'+':''}${r.v.toLocaleString()}</span></div>`).join('')
+    || `<div class="empty" style="padding:16px 0">這個月沒有紀錄</div>`;
   renderRollup();
 }
+
+/* ================= 其他清單改顯示規格名 ================= */
 
 /* 合併報表:多店時才顯示 */
 async function renderRollup(){
@@ -2350,10 +2489,10 @@ function openReturn(){
   const map={};state.styles.forEach(x=>map[x.no]=x);
   const src=state.sales.filter(x=>x.qty>0);
   if(!src.length){toast('沒有可退的銷售紀錄');return;}
-  const opts=src.map((s,i)=>`<option value="${i}">${s.date} ${map[s.sku]?.name||s.sku} ×${s.qty}</option>`).join('');
+  const opts=src.slice().reverse().map((s,i)=>`<option value="${src.length-1-i}">${shortDate(s.date)} ${skuLabel(map[s.sku])||s.sku} ×${s.qty} · ${money(s.amt)}</option>`).join('');
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
     <h3>退貨 / 換貨</h3><div class="sub">選原銷售紀錄,退貨回補庫存並沖銷營收</div>
-    <label class="fld">原銷售</label><select class="f" id="rt_sale">${opts}</select>
+    <label class="fld">原銷售 <span class="opt">· 最近的在最上面</span></label><select class="f" id="rt_sale">${opts}</select>
     <label class="fld">類型</label>
     <div class="chips"><div class="chip on" onclick="pick(this,'rtype')">退貨</div><div class="chip" onclick="pick(this,'rtype')">換貨</div></div>
     <label class="fld">原因</label><input class="f" id="rt_reason" placeholder="尺寸不合 / 瑕疵 …">
@@ -2392,7 +2531,9 @@ function renderReturnList(){
 
 /* ---------------- modals ---------------- */
 function openModal(html){document.getElementById('sheet').innerHTML=html;document.getElementById('modal').classList.add('on');}
-function closeModal(){document.getElementById('modal').classList.remove('on');}
+function closeModal(){ camStop(); document.getElementById('modal').classList.remove('on'); }
+
+/* ================= 今日交易 / 作廢 / 日結 ================= */
 document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal();});
 
 /* ---------------- 開銷 / 待匯款 ---------------- */
@@ -2432,7 +2573,7 @@ function payTopay(no){
 /* ---------------- 手動補記銷售 ---------------- */
 function fillSaleStyles(){
   const sel=document.getElementById('saleStyle');if(!sel)return;
-  sel.innerHTML=state.styles.map(s=>`<option value="${s.no}">${s.no} ${s.name}</option>`).join('');
+  sel.innerHTML=state.styles.filter(s=>s.active!==false).map(s=>`<option value="${s.no}">${s.no} ${skuLabel(s)}</option>`).join('');
   fillSaleSkus();
 }
 function fillSaleSkus(){
@@ -2450,6 +2591,344 @@ function saveSale(){
   api('frcs_manual_sale',S({p_sale:sale}));
   toast('已補記 '+s.name+' ×'+qty);
 }
+
+/* ================= 款式 / SKU 共用 ================= */
+/* 一個「款式」(styleNo) 底下掛多個 SKU(no = 條碼)，每個 SKU 一個尺寸顏色。
+   單一規格的商品 styleNo = no。清單、叫貨、盤點按款式看，收銀、標籤、庫存按 SKU 記。 */
+const SIZE_ORDER=['XS','S','M','L','XL','XXL','F'];
+
+function sortSizes(list){
+  return [...list].sort((a,b)=>{
+    const ia=SIZE_ORDER.indexOf(a), ib=SIZE_ORDER.indexOf(b);
+    if(ia>=0&&ib>=0)return ia-ib; if(ia>=0)return -1; if(ib>=0)return 1;
+    return String(a).localeCompare(String(b),'zh-Hant',{numeric:true});
+  });
+}
+
+function variantLabel(s){ return [s.color,s.size].filter(Boolean).join(' / '); }
+
+function skuLabel(s){ if(!s)return ''; const v=variantLabel(s); return s.name+(v?' · '+v:''); }
+
+function styleGroups(includeInactive){
+  const map=new Map();
+  state.styles.forEach(s=>{
+    if(!includeInactive && s.active===false) return;
+    const k=s.styleNo||s.no;
+    let g=map.get(k);
+    if(!g){ g={styleNo:k,name:s.name,cat:s.cat,gender:s.gender,price:s.price,cost:s.cost,photo:s.photo||'',
+              note:s.note||'',low:s.low,active:false,skus:[],qty:0}; map.set(k,g); }
+    g.skus.push(s);
+    if(s.active!==false){ g.qty+=s.qty; g.active=true; }
+    if(!g.photo&&s.photo) g.photo=s.photo;
+  });
+  return [...map.values()];
+}
+
+function findGroup(styleNo){ return styleGroups(true).find(g=>g.styleNo===styleNo)||null; }
+
+function groupColors(g){ return [...new Set(g.skus.filter(s=>s.active!==false).map(s=>s.color||''))]; }
+
+function groupSizes(g){ return sortSizes([...new Set(g.skus.filter(s=>s.active!==false).map(s=>s.size||''))]); }
+
+function hasVariants(g){ const a=g.skus.filter(s=>s.active!==false); return a.length>1 || !!(a[0]&&(a[0].size||a[0].color)); }
+
+function matrixHtml(g){
+  const colors=groupColors(g), sizes=groupSizes(g);
+  const cell=(c,z)=>{
+    const s=g.skus.find(x=>x.active!==false&&(x.color||'')===c&&(x.size||'')===z);
+    if(!s) return '<td style="color:var(--line)">·</td>';
+    return `<td class="${qtyClass(s.qty,s.low)}" title="${s.no}">${s.qty}</td>`;
+  };
+  return `<div class="matrix"><table class="mtx">
+    <tr><th></th>${sizes.map(z=>`<th>${z||'—'}</th>`).join('')}</tr>
+    ${colors.map(c=>`<tr><td class="rowh">${c||'—'}</td>${sizes.map(z=>cell(c,z)).join('')}</tr>`).join('')}
+  </table></div>`;
+}
+
+/* ================= 商品清單（按款式） ================= */
+
+function sfAddColor(){
+  const inp=document.getElementById('sf_color_in'); const v=inp.value.trim(); if(!v)return;
+  if(!sf.colors.includes(v)) sf.colors.push(v);
+  inp.value=''; sfRenderSpec();
+}
+
+function sfAddSize(){
+  const inp=document.getElementById('sf_size_in'); const v=inp.value.trim().toUpperCase(); if(!v)return;
+  if(!sf.sizes.includes(v)) sf.sizes=sortSizes([...sf.sizes,v]);
+  inp.value=''; sfRenderSpec();
+}
+
+function sfToggleSize(z){ sf.sizes=sf.sizes.includes(z)?sf.sizes.filter(x=>x!==z):sortSizes([...sf.sizes,z]); sfRenderSpec(); }
+
+function sfRemoveColor(c){ sf.colors=sf.colors.filter(x=>x!==c); sfRenderSpec(); }
+/* 這個規格的條碼:已有的沿用;新的接在款式編號後面兩位流水 */
+
+function sfSkuNo(c,z){
+  const key=c+'|'+z;
+  if(sf.assign[key]) return sf.assign[key];
+  const sn=sf.isNew?(val('st_no')||'?'):sf.styleNo;
+  const ex=sf.g&&sf.g.skus.find(s=>(s.color||'')===c&&(s.size||'')===z);
+  if(ex){ sf.assign[key]=ex.no; return ex.no; }
+  if(!c&&!z){
+    const single=sf.g&&sf.g.skus.find(s=>!s.color&&!s.size);
+    sf.assign[key]=single?single.no:sn; return sf.assign[key];
+  }
+  const used=new Set([...state.styles.map(s=>s.no),...Object.values(sf.assign)]);
+  for(let i=1;i<100;i++){ const no=sn+String(i).padStart(2,'0'); if(!used.has(no)){ sf.assign[key]=no; return no; } }
+  return sn+'99';
+}
+
+function sfCells(){
+  const colors=sf.colors.length?sf.colors:[''];
+  const sizes=sf.sizes.length?sf.sizes:[''];
+  /* 拿掉已經不在矩陣裡的配號,不然流水號會被用掉 */
+  const keys=new Set(); colors.forEach(c=>sizes.forEach(z=>keys.add(c+'|'+z)));
+  Object.keys(sf.assign).forEach(k=>{ if(!keys.has(k)) delete sf.assign[k]; });
+  const out=[];
+  colors.forEach(c=>sizes.forEach(z=>out.push({c,z,no:sfSkuNo(c,z)})));
+  return out;
+}
+
+function sfRenderSpec(){
+  if(!sf)return;
+  const ce=document.getElementById('sf_colors');
+  ce.innerHTML=sf.colors.length?sf.colors.map(c=>`<div class="chip on" onclick="sfRemoveColor('${c.replace(/'/g,'')}')">${c} ✕</div>`).join(''):'<span class="hint" style="margin:0">尚未加顏色</span>';
+  const se=document.getElementById('sf_sizes');
+  const all=[...SIZE_PRESET,...sf.sizes.filter(z=>!SIZE_PRESET.includes(z))];
+  se.innerHTML=all.map(z=>`<div class="chip ${sf.sizes.includes(z)?'on':''}" onclick="sfToggleSize('${z}')">${z}</div>`).join('');
+
+  const me=document.getElementById('sf_matrix');
+  const cells=sfCells();
+  const existing=sf.g?sf.g.skus.filter(s=>s.active!==false):[];
+  const dropped=existing.filter(s=>!cells.some(x=>x.no===s.no));
+  if(!sf.colors.length&&!sf.sizes.length){
+    const one=cells[0];
+    const ex=existing.find(s=>s.no===one.no);
+    me.innerHTML=`<div class="cntrow"><div style="flex:1"><div style="font-weight:700;font-size:13px">單一規格</div><div class="style-no">條碼 ${one.no}${ex?' · 目前庫存 '+ex.qty:''}</div></div>
+      ${ex?'':`<div style="display:flex;align-items:center;gap:6px"><span class="hint" style="margin:0">初始庫存</span><input class="f" style="width:64px;padding:7px;text-align:center" type="number" inputmode="numeric" data-sku="${one.no}" value="${sf.init[one.no]||0}" oninput="sf.init[this.dataset.sku]=+this.value||0"></div>`}</div>`
+      +(dropped.length?`<div class="hint" style="color:var(--amber)">儲存後會下架:${dropped.map(skuLabel).join('、')}</div>`:'');
+    return;
+  }
+  const colors=sf.colors.length?sf.colors:[''], sizes=sf.sizes.length?sf.sizes:[''];
+  const cell=(c,z)=>{
+    const no=sfSkuNo(c,z); const ex=existing.find(s=>s.no===no);
+    return `<td style="padding:4px 3px">
+      ${ex?`<div class="${qtyClass(ex.qty,ex.low)}" style="font-weight:700">${ex.qty}</div>`
+          :`<input class="f" style="width:46px;padding:5px 2px;text-align:center;font-size:12px" type="number" inputmode="numeric" data-sku="${no}" value="${sf.init[no]||0}" oninput="sf.init[this.dataset.sku]=+this.value||0">`}
+      <div style="font-size:8px;color:var(--muted);letter-spacing:0">${no}</div></td>`;
+  };
+  me.innerHTML=`<div class="hint" style="margin-bottom:4px">格子裡:已有的規格顯示目前庫存,新規格填初始庫存。下面小字是條碼。</div>
+    <div class="matrix"><table class="mtx">
+      <tr><th></th>${sizes.map(z=>`<th>${z||'—'}</th>`).join('')}</tr>
+      ${colors.map(c=>`<tr><td class="rowh">${c||'—'}</td>${sizes.map(z=>cell(c,z)).join('')}</tr>`).join('')}
+    </table></div>
+    ${dropped.length?`<div class="hint" style="color:var(--amber)">儲存後會下架(庫存紀錄保留):${dropped.map(skuLabel).join('、')}</div>`:''}`;
+}
+
+async function openStyleHistory(styleNo){
+  const g=findGroup(styleNo); if(!g)return;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>最近異動</h3><div class="sub">${g.name} · ${g.styleNo}</div><div class="empty" style="padding:20px 0">載入中…</div>`);
+  let rows=[];
+  try{ rows=await rpc('frcs_style_history',S({p_style_no:styleNo,p_limit:40})); }
+  catch(e){ document.querySelector('.sheet .empty').textContent='載入失敗:'+errMsg(e); return; }
+  const body=rows.length?`<div class="ledger">${rows.map(r=>`<div class="lr">
+      <span class="l">${shortDate(r.date)} ${r.time||''} ${KIND_LABEL[r.kind]||r.kind}${variantLabel(r)?' · '+variantLabel(r):''}${r.note?'<br><span style="font-size:10px">'+r.note+'</span>':''}</span>
+      <span style="color:${r.qty>0?'var(--green)':'var(--red)'};white-space:nowrap">${r.qty>0?'+':''}${r.qty}</span></div>`).join('')}</div>`
+    :`<div class="empty">這款還沒有任何異動</div>`;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>最近異動</h3><div class="sub">${g.name} · ${g.styleNo} · 最近 ${rows.length} 筆</div>${body}`);
+}
+
+/* ================= 收銀：加入購物車 ================= */
+
+function openItemPrice(no){
+  const c=state.cart.find(x=>x.no===no); if(!c)return;
+  const lp=c.listPrice||c.price;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>單品價格</h3><div class="sub">${c.name} · 原價 ${money(lp)}</div>
+    <div class="chips">${[0,10,20,30,50].map(p=>`<div class="chip ${Math.round((1-c.price/lp)*100)===p?'on':''}" onclick="setItemPrice('${no}',${Math.round(lp*(100-p)/100)})">${p?p+'% off':'原價'}</div>`).join('')}</div>
+    <label class="fld">單價 NT$</label>
+    <input class="f" id="ip_val" type="number" inputmode="numeric" value="${c.price}" onkeydown="if(event.key==='Enter')setItemPrice('${no}',+this.value)">
+    <button class="btn" style="margin-top:14px" onclick="setItemPrice('${no}',+val('ip_val'))">套用</button>
+    <div class="hint">只影響這一單。要永久改價請到商品庫存 → 編輯。</div>`);
+}
+
+function setItemPrice(no,p){
+  const c=state.cart.find(x=>x.no===no); if(!c)return;
+  if(!(p>=0)){toast('價格不對');return;}
+  c.price=Math.round(p); closeModal(); renderRegister();
+  toast(c.price<(c.listPrice||c.price)?'已折讓 '+money((c.listPrice||c.price)-c.price):'已恢復原價');
+}
+
+/* 手動選品:按款式看圖,有規格再選尺寸顏色 */
+
+function openVariantList(styleNo,mode){
+  const g=findGroup(styleNo); if(!g)return;
+  const act=g.skus.filter(s=>s.active!==false);
+  const rows=act.map(s=>{
+    const inCart=(state.cart.find(c=>c.no===s.no)||{}).qty||0;
+    const ew=(s.elsewhere||[]).map(e=>e.store+' '+e.qty).join('、');
+    if(mode==='transfer' && !(s.elsewhere&&s.elsewhere.length)) return '';
+    return `<div class="cntrow" style="cursor:pointer" onclick="${mode==='cart'?`pickVariant('${s.no}','${styleNo}')`:`openTransfer('${s.no}')`}">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">${variantLabel(s)||'單一規格'}</div>
+        <div class="style-no">${s.no}${ew?' · 他店 '+ew:''}</div></div>
+      <div class="mono" style="font-size:15px;color:${s.qty<=0?'var(--red)':'var(--ink)'}">${inCart?'<span style="color:var(--green)">購 '+inCart+'</span> · ':''}剩 ${s.qty}</div>
+    </div>`;}).join('');
+  openModal(`<button class="xclose" onclick="${mode==='cart'?'openPickItem()':'closeModal()'}">${mode==='cart'?'←':'✕'}</button>
+    <h3>${mode==='cart'?'選規格':'要從他店調哪個規格'}</h3><div class="sub">${g.name} · ${g.styleNo}</div>
+    <div style="margin-top:8px">${rows||'<div class="empty">沒有可調的規格</div>'}</div>
+    ${mode==='cart'?`<button class="btn ghost sm" style="margin-top:10px" onclick="closeModal()">完成</button>`:''}`);
+}
+
+function pickVariant(no,styleNo){ if(addToCart(no,1)){ toast('已加入 '+skuLabel(findStyle(no))); openVariantList(styleNo,'cart'); } }
+
+/* 手機鏡頭掃條碼(支援 BarcodeDetector 的瀏覽器才有按鈕) */
+let camStream=null, camTimer=null;
+
+function camSupported(){ return ('BarcodeDetector' in window) && !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia); }
+
+async function openCamScan(target){
+  if(!camSupported()){toast('這個瀏覽器不支援鏡頭掃碼,請用掃描槍');return;}
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>鏡頭掃碼</h3><div class="sub">把條碼對準框框</div>
+    <video id="cam_v" autoplay playsinline muted style="width:100%;background:#000;border:2px solid var(--prussian)"></video>
+    <div class="hint" id="cam_msg">啟動鏡頭中…</div>`);
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    const v=document.getElementById('cam_v'); v.srcObject=camStream;
+    const det=new BarcodeDetector({formats:['code_128','ean_13','ean_8','code_39','upc_a','qr_code']});
+    let busy=false;
+    camTimer=setInterval(async()=>{
+      if(busy||!document.getElementById('cam_v'))return; busy=true;
+      try{
+        const codes=await det.detect(v);
+        if(codes.length){
+          const code=String(codes[0].rawValue||'').trim();
+          const s=findStyle(code);
+          if(s){
+            camStop();
+            if(target==='intake'){ document.getElementById('ik_no').value=s.no; closeModal(); toast('已帶入 '+skuLabel(s)); }
+            else { closeModal(); if(addToCart(s.no,1)) toast('加入 '+skuLabel(s)); }
+          } else { document.getElementById('cam_msg').textContent='讀到 '+code+',但沒有這個商品'; }
+        }
+      }catch(e){}
+      busy=false;
+    },350);
+    document.getElementById('cam_msg').textContent='掃描中…';
+  }catch(e){ document.getElementById('cam_msg').textContent='開不了鏡頭:'+(e.message||e); }
+}
+
+function camStop(){
+  if(camTimer){clearInterval(camTimer);camTimer=null;}
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+}
+
+function openVoidTxn(no){
+  const t=(state.txns||[]).find(x=>x.no===no); if(!t)return;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>作廢交易</h3><div class="sub">${t.no} · ${money(t.total)} · ${t.items.map(i=>i.name+'×'+i.qty).join('、')}</div>
+    <div class="hint">作廢後這張單不算營收、庫存加回去、會員累積扣回。只能作廢當天、日結前的單;之前的請走退貨。</div>
+    <label class="fld">原因</label><input class="f" id="vd_reason" placeholder="打錯單 / 客人取消 …">
+    <button class="btn red" style="margin-top:14px" onclick="doVoidTxn('${no}')">確認作廢</button>`);
+}
+
+async function doVoidTxn(no){
+  const t=(state.txns||[]).find(x=>x.no===no); if(!t||t.voided)return;
+  const reason=val('vd_reason');
+  const r=await api('frcs_void_txn',{p_no:no,p_reason:reason});
+  if(r.ok===false && !r.queued) return;
+  t.voided=true; t.voidReason=reason;
+  t.items.forEach(i=>{const s=findStyle(i.no); if(s) s.qty+=i.qty;});
+  state.sales=state.sales.filter(x=>x.txn!==no);
+  if(t.memberPhone){const m=findMemberByPhone(t.memberPhone); if(m) m.spent=Math.max(0,m.spent-t.total);}
+  closeModal(); renderTxns(); toast('已作廢 '+no);
+}
+
+function openDayClose(){
+  const txns=(state.txns||[]).filter(t=>!t.voided);
+  const byPay={}; txns.forEach(t=>{byPay[t.pay||'其他']=(byPay[t.pay||'其他']||0)+t.total;});
+  const cash=byPay['現金']||0;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>日結</h3><div class="sub">${today()} · ${txns.length} 筆</div>
+    <div class="ledger">${Object.entries(byPay).map(([k,v])=>`<div class="lr"><span class="l">${k}</span><span>${money(v)}</span></div>`).join('')||'<div class="lr"><span class="l">今天沒有交易</span><span></span></div>'}</div>
+    <div class="kpi" style="margin-top:12px"><div class="cell"><div class="lab">現金應有</div><div class="val">${money(cash)}</div></div>
+      <div class="cell"><div class="lab">差額</div><div class="val" id="dc_diff">—</div></div></div>
+    <label class="fld">實點現金 NT$</label>
+    <input class="f" id="dc_cash" type="number" inputmode="numeric" placeholder="數錢箱裡的現金(不含零用金)" oninput="dcDiff(${cash})">
+    <label class="fld">備註 <span class="opt">· 差額原因、零用金…</span></label><input class="f" id="dc_note" placeholder="—">
+    <button class="btn green" style="margin-top:14px" onclick="doDayClose()">確認日結</button>
+    <div class="hint">日結後今天的單不能再作廢。收款數字由後端重算,不是用畫面上的。</div>`);
+}
+
+function dcDiff(cash){
+  const v=+val('dc_cash')||0; const d=v-cash; const el=document.getElementById('dc_diff');
+  el.textContent=(d>0?'+':'')+d.toLocaleString(); el.className='val '+(d===0?'pos':'neg');
+}
+
+async function doDayClose(){
+  const cashCounted=+val('dc_cash')||0, note=val('dc_note');
+  const r=await api('frcs_day_close',S({p:{id:uuid(),cashCounted,note,date:today()}}));
+  if(r.ok===false && !r.queued) return;
+  if(r.ok && r.byPay) state.dayClose={closedOn:r.closedOn,byPay:r.byPay,txnCount:r.txnCount,cashExpected:r.cashExpected,cashCounted:r.cashCounted,diff:r.diff,note};
+  else {
+    const txns=(state.txns||[]).filter(t=>!t.voided); const cash=txns.filter(t=>t.pay==='現金').reduce((a,t)=>a+t.total,0);
+    state.dayClose={closedOn:today(),byPay:{},txnCount:txns.length,cashExpected:cash,cashCounted,diff:cashCounted-cash,note};
+  }
+  closeModal(); renderTxns(); toast('已日結');
+}
+
+/* ================= 預購(綁會員) ================= */
+
+function pfLookup(){
+  const m=findMemberByPhone(val('pf_phone'));
+  const el=document.getElementById('pf_found');
+  if(m){ el.textContent='會員 '+m.name+' · '+m.tier; if(!val('pf_cust')) document.getElementById('pf_cust').value=m.name; }
+  else el.textContent=normPhone(val('pf_phone')).length>=8?'查無會員,會以電話記錄':'';
+}
+
+async function openMemberDetail(phone){
+  const m=findMemberByPhone(phone); if(!m)return;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>${m.name}</h3><div class="sub">${m.phone} · 累積 ${money(m.spent)} · 入會 ${m.joined||'—'}</div>
+    <div class="grid2">
+      <div><label class="fld">稱呼</label><input class="f" id="md_name" value="${m.name.replace(/"/g,'&quot;')}"></div>
+      <div><label class="fld">等級</label><select class="f" id="md_tier"><option ${m.tier==='一般'?'selected':''}>一般</option><option ${m.tier==='VIP'?'selected':''}>VIP</option></select></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">折扣(折)</label><input class="f" id="md_disc" type="number" inputmode="numeric" value="${Math.round(m.disc*100)}"></div>
+      <div><label class="fld">備註</label><input class="f" id="md_note" value="${(m.note||'').replace(/"/g,'&quot;')}" placeholder="尺寸偏好、喜歡的風格…"></div>
+    </div>
+    <div class="btn-row"><button class="btn sm" onclick="saveMemberDetail('${m.phone}')">儲存</button>
+      <button class="btn ghost sm" onclick="state.cartMember=findMemberByPhone('${m.phone}');closeModal();setMode('pos');toast('已帶入 ${m.name}')">帶入收銀</button></div>
+    <h2 class="sec" style="margin-top:18px">購買紀錄</h2>
+    <div id="md_hist"><div class="empty" style="padding:16px 0">載入中…</div></div>`);
+  try{
+    const h=await rpc('frcs_member_history',{p_phone:phone,p_limit:50});
+    const el=document.getElementById('md_hist'); if(!el)return;
+    const tx=(h.txns||[]).map(t=>`<div class="lr"><span class="l">${shortDate(t.date)} ${t.items.map(i=>i.name+'×'+i.qty).join('、')}${t.voided?' <span style="color:var(--red)">作廢</span>':''}</span><span style="${t.voided?'text-decoration:line-through':''}">${money(t.total)}</span></div>`).join('');
+    const po=(h.preorders||[]).map(p=>`<div class="lr"><span class="l">${shortDate(p.createdAt)} 預購 ${p.name||p.sku}${variantLabel(p)?' · '+variantLabel(p):''} ×${p.qty} · ${p.stage}</span><span>${money(p.price*p.qty)}</span></div>`).join('');
+    el.innerHTML=(tx||po)?`<div class="ledger">${tx}${po}</div>`:`<div class="empty" style="padding:16px 0">還沒有紀錄</div>`;
+  }catch(e){ const el=document.getElementById('md_hist'); if(el) el.innerHTML=`<div class="hint" style="color:var(--red)">載入失敗:${errMsg(e)}</div>`; }
+}
+
+function saveMemberDetail(phone){
+  const m=findMemberByPhone(phone); if(!m)return;
+  m.name=val('md_name')||m.name; m.tier=val('md_tier'); m.disc=(+val('md_disc')||95)/100; m.note=val('md_note');
+  api('frcs_upsert_member',{p_member:{phone:m.phone,name:m.name,tier:m.tier,disc:m.disc,joined:m.joined,note:m.note}});
+  closeModal(); renderMembers(); toast('已更新 '+m.name);
+}
+
+/* ================= 報表:月份切換、六個月趨勢、暢銷、售罄率 ================= */
+
+function monthList(n){
+  const out=[]; const d=new Date(); d.setDate(1);
+  for(let i=0;i<n;i++){ out.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')); d.setMonth(d.getMonth()-1); }
+  return out;
+}
+
+function setRepMonth(ym){ state.repMonth=ym; renderReport(); }
 
 /* ---------------- util ---------------- */
 function pick(el,group){el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');state.picks[group]=el.textContent.trim();}
@@ -2483,6 +2962,7 @@ function initDateline(){
 initDateline();
 renderModebar();
 setMode('pos');
+if(camSupported()) document.querySelectorAll('.cambtn').forEach(b=>b.style.display='');
 /* 開機:若上次離線留下待補送資料,橫幅立刻紅色警示 */
 if(pendingQueue.length) setSync('error');
 else setSync(sb?'syncing':'offline');

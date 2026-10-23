@@ -81,8 +81,11 @@ create table if not exists frcs_config (
 -- 2. 商品主檔（全店共用；庫存按店分，見 stock_moves）
 -- ---------------------------------------------------------------------
 create table if not exists frcs_items (
-  no         text primary key,                    -- 商品編號 = 條碼
-  name       text not null,
+  no         text primary key,                    -- SKU 編號 = 條碼（一個尺寸顏色一張）
+  style_no   text not null,                       -- 款式編號；單一規格的商品 style_no = no
+  size       text,                                -- S / M / L / F …，沒有就 null
+  color      text,                                -- 黑 / 白 …，沒有就 null
+  name       text not null,                       -- 款式名（同款每個 SKU 一樣）
   cat        text not null default '上衣',
   gender     text not null default '男',
   cost       numeric not null default 0,          -- 進價（每件，含運費關稅攤提）
@@ -94,10 +97,11 @@ create table if not exists frcs_items (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create index if not exists frcs_items_style on frcs_items(style_no);
 
 -- ---------------------------------------------------------------------
 -- 3. 庫存流水帳
---    kind：sale / return / intake / receive / count / transfer_out / transfer_in / manual
+--    kind：sale / return / intake / receive / count / transfer_out / transfer_in / manual / void
 -- ---------------------------------------------------------------------
 create table if not exists frcs_stock_moves (
   id          uuid primary key default gen_random_uuid(),
@@ -148,6 +152,9 @@ create table if not exists frcs_txns (
   member       text,
   member_phone text,
   items        jsonb not null default '[]'::jsonb,
+  voided       boolean not null default false,    -- 作廢：銷售明細刪掉、庫存反向寫回，單留著
+  void_reason  text,
+  voided_at    timestamptz,
   created_by   uuid,
   created_at   timestamptz not null default now()
 );
@@ -179,6 +186,7 @@ create table if not exists frcs_preorders (
   deposit    numeric not null default 0,
   stage      text not null default '收訂金',
   cust       text,
+  member_phone text,                              -- 綁會員（可空）
   created_on date not null default frcs_today(),
   done_on    date,
   created_at timestamptz not null default now(),
@@ -258,7 +266,25 @@ create table if not exists frcs_transfers (
 );
 
 -- ---------------------------------------------------------------------
--- 9. 預設資料
+-- 9. 日結：打烊對錢箱
+-- ---------------------------------------------------------------------
+create table if not exists frcs_day_close (
+  id            uuid primary key default gen_random_uuid(),
+  store         text not null references frcs_stores(code),
+  closed_on     date not null default frcs_today(),
+  by_pay        jsonb not null default '{}'::jsonb,  -- {"現金":1200,"刷卡":3000,...}
+  txn_count     int not null default 0,
+  cash_expected numeric not null default 0,
+  cash_counted  numeric not null default 0,
+  diff          numeric not null default 0,
+  note          text,
+  created_by    uuid,
+  created_at    timestamptz not null default now(),
+  unique (store, closed_on)
+);
+
+-- ---------------------------------------------------------------------
+-- 10. 預設資料
 -- ---------------------------------------------------------------------
 insert into frcs_stores (code, name, sort_order) values ('FRCS', 'FRCS 台南', 0)
 on conflict (code) do nothing;

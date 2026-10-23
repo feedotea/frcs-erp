@@ -43,7 +43,7 @@ select id, 'Francis', 'owner' from auth.users where email = 'you@example.com'
 on conflict (user_id) do update set role = 'owner', active = true;
 ```
 
-店員帳號 role 填 `'staff'`：看不到進價、帳務、採購，後端連資料都不送。
+店員帳號 role 填 `'staff'`：看不到進價、帳務、採購，後端連資料都不送；可以建商品、拍照、改品名分類，但售價只有建新款時能填，之後改價限老闆（後端擋）。
 
 ## 前端設定
 
@@ -55,6 +55,15 @@ const SUPABASE_ANON = "sb_publishable_...";   // Project Settings → API → an
 ```
 
 Dashboard → Authentication → URL Configuration → Site URL 填 `https://feedotea.github.io/frcs-erp/`。
+
+## 資料模型要點
+
+- **款式 vs SKU**：`frcs_items` 一列是一個 SKU（條碼），`style_no` 把同款的尺寸顏色串起來；單一規格的商品 `style_no = no`。
+  新增／編輯走 `frcs_save_style`，整款一次存；SKU 條碼 = 款式編號 + 兩位流水（21497 → 2149701、2149702…）。
+- **庫存**是 `frcs_stock_moves` 加總，`frcs_v_stock` 是現況；異動種類見 01 的註解。
+- **作廢**（`frcs_void_txn`，限老闆、限當天、日結前）：刪 `frcs_sales`、庫存反向寫一筆 `void`、單留著標 `voided`。
+- **日結**（`frcs_day_close`）：各付款方式小計由後端從 `frcs_txns` 重算，前端只送實點現金。一天一筆，重做會覆蓋。
+- **預購**可綁 `member_phone`；`frcs_member_history` 給會員頁看購買與預購紀錄。
 
 ## 角色與 PIN
 

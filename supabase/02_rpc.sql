@@ -66,13 +66,14 @@ begin
     'me',     (select jsonb_build_object('name', name, 'role', role) from frcs_staff where user_id = auth.uid()),
 
     'items',  (select coalesce(jsonb_agg(jsonb_build_object(
-                 'no', i.no, 'name', i.name, 'cat', i.cat, 'gender', i.gender,
+                 'no', i.no, 'styleNo', i.style_no, 'size', i.size, 'color', i.color,
+                 'name', i.name, 'cat', i.cat, 'gender', i.gender,
                  'cost', case when v_owner then i.cost else 0 end,
                  'price', i.price, 'low', i.low, 'photo', i.photo, 'note', i.note, 'active', i.active,
                  'qty', coalesce((select s.qty from frcs_v_stock s where s.store = v_store and s.no = i.no), 0),
                  'elsewhere', coalesce((select jsonb_agg(jsonb_build_object('store', s.store, 'qty', s.qty))
                                         from frcs_v_stock s where s.no = i.no and s.store <> v_store and s.qty > 0), '[]'::jsonb)
-               ) order by i.created_at desc, i.no), '[]'::jsonb)
+               ) order by i.created_at desc, i.style_no, i.color, i.size, i.no), '[]'::jsonb)
                from frcs_items i),
 
     'members', (select coalesce(jsonb_agg(jsonb_build_object(
@@ -82,6 +83,7 @@ begin
     -- 今日交易
     'txns',   (select coalesce(jsonb_agg(jsonb_build_object(
                  'no', t.no, 'date', t.sold_on, 'time', t.at_time, 'total', t.total, 'pay', t.pay, 'member', t.member,
+                 'memberPhone', t.member_phone, 'voided', t.voided, 'voidReason', t.void_reason,
                  'items', case when v_owner then t.items
                                else (select coalesce(jsonb_agg(x - 'cost' || '{"cost":0}'::jsonb), '[]'::jsonb)
                                      from jsonb_array_elements(t.items) x) end
@@ -98,7 +100,7 @@ begin
     -- 預購：未完成的全部 ＋ 完成 60 天內的
     'preorders', (select coalesce(jsonb_agg(jsonb_build_object(
                     'no', p.no, 'sku', p.sku, 'qty', p.qty, 'price', p.price, 'deposit', p.deposit,
-                    'stage', p.stage, 'cust', p.cust, 'createdAt', p.created_on
+                    'stage', p.stage, 'cust', p.cust, 'memberPhone', p.member_phone, 'createdAt', p.created_on
                   ) order by p.created_at desc), '[]'::jsonb)
                   from frcs_preorders p
                   where p.store = v_store and (p.stage <> '已收尾款' or p.done_on >= v_today - 60)),
@@ -114,6 +116,11 @@ begin
                   'time', r.at_time, 'type', r.type, 'name', r.name, 'qty', r.qty, 'amt', r.amt, 'reason', r.reason
                 ) order by r.created_at desc), '[]'::jsonb)
                 from frcs_returns r where r.store = v_store and r.ret_on = v_today),
+
+    -- 今天有沒有日結過
+    'dayClose', (select jsonb_build_object('closedOn', c.closed_on, 'byPay', c.by_pay, 'txnCount', c.txn_count,
+                   'cashExpected', c.cash_expected, 'cashCounted', c.cash_counted, 'diff', c.diff, 'note', c.note)
+                 from frcs_day_close c where c.store = v_store and c.closed_on = v_today),
 
     'transfers', (select coalesce(jsonb_agg(jsonb_build_object(
                     'from', t.from_store, 'to', t.to_store, 'sku', t.sku, 'name', t.name, 'qty', t.qty, 'date', t.moved_on, 'note', t.note
@@ -188,9 +195,11 @@ begin
   end if;
   v_new := not exists (select 1 from frcs_items where no = v_no);
 
-  insert into frcs_items (no, name, cat, gender, cost, price, low, photo, note, active)
+  insert into frcs_items (no, style_no, size, color, name, cat, gender, cost, price, low, photo, note, active)
   values (
     v_no,
+    coalesce(nullif(trim(p_item->>'styleNo'), ''), v_no),
+    nullif(trim(p_item->>'size'), ''), nullif(trim(p_item->>'color'), ''),
     coalesce(nullif(trim(p_item->>'name'), ''), '未命名'),
     coalesce(nullif(p_item->>'cat', ''), '上衣'),
     coalesce(nullif(p_item->>'gender', ''), '男'),
@@ -205,7 +214,10 @@ begin
     name   = excluded.name,
     cat    = excluded.cat,
     gender = excluded.gender,
-    price  = excluded.price,
+    size   = excluded.size,
+    color  = excluded.color,
+    -- 售價只有老闆改得動；店員送來的照舊
+    price  = case when v_owner then excluded.price else frcs_items.price end,
     low    = excluded.low,
     note   = excluded.note,
     active = excluded.active,
@@ -243,8 +255,8 @@ begin
     if v_no is null or v_no = '' then continue; end if;
     if exists (select 1 from frcs_items where no = v_no) then v_upd := v_upd + 1; else v_added := v_added + 1; end if;
 
-    insert into frcs_items (no, name, cat, gender, cost, price, low)
-    values (v_no, coalesce(nullif(trim(r->>'name'), ''), '未命名'),
+    insert into frcs_items (no, style_no, name, cat, gender, cost, price, low)
+    values (v_no, v_no, coalesce(nullif(trim(r->>'name'), ''), '未命名'),
             coalesce(nullif(r->>'cat', ''), '上衣'), coalesce(nullif(r->>'gender', ''), '男'),
             coalesce((r->>'cost')::numeric, 0), coalesce((r->>'price')::numeric, 0), coalesce((r->>'low')::int, 1))
     on conflict (no) do update set
@@ -516,12 +528,13 @@ begin
     raise exception '缺預購單號' using errcode = '22023';
   end if;
   v_new := not exists (select 1 from frcs_preorders where no = v_no);
-  insert into frcs_preorders (no, store, sku, qty, price, deposit, stage, cust, created_on)
+  insert into frcs_preorders (no, store, sku, qty, price, deposit, stage, cust, member_phone, created_on)
   values (v_no, v_store, p->>'sku', coalesce((p->>'qty')::int, 1), coalesce((p->>'price')::numeric, 0), v_dep,
-          coalesce(nullif(p->>'stage', ''), '收訂金'), nullif(p->>'cust', ''), v_date)
+          coalesce(nullif(p->>'stage', ''), '收訂金'), nullif(p->>'cust', ''),
+          nullif(regexp_replace(coalesce(p->>'memberPhone', ''), '\D', '', 'g'), ''), v_date)
   on conflict (no) do update set
     sku = excluded.sku, qty = excluded.qty, price = excluded.price, deposit = excluded.deposit,
-    cust = excluded.cust, updated_at = now();
+    cust = excluded.cust, member_phone = excluded.member_phone, updated_at = now();
   if v_new and v_dep > 0 then
     insert into frcs_sales (id, store, sold_on, sku, qty, amt, cost, note)
     values (md5('dep:' || v_no)::uuid, v_store, v_date, p->>'sku', 0, v_dep, 0, '訂金 ' || v_no)
@@ -636,8 +649,9 @@ begin
       update frcs_items set cost = v_cost, active = true, updated_at = now() where no = it->>'no';
       v_upd := v_upd + 1;
     else
-      insert into frcs_items (no, name, cat, gender, cost, price, low)
-      values (it->>'no', coalesce(nullif(it->>'name', ''), '未命名'), coalesce(nullif(it->>'cat', ''), '上衣'),
+      insert into frcs_items (no, style_no, size, color, name, cat, gender, cost, price, low)
+      values (it->>'no', coalesce(nullif(it->>'styleNo', ''), it->>'no'), nullif(it->>'size', ''), nullif(it->>'color', ''),
+              coalesce(nullif(it->>'name', ''), '未命名'), coalesce(nullif(it->>'cat', ''), '上衣'),
               coalesce(nullif(it->>'gender', ''), '男'), v_cost,
               case when coalesce((it->>'price')::numeric, 0) > 0 then (it->>'price')::numeric
                    else round(v_cost * 2.8 / 10) * 10 end, 1);
@@ -706,6 +720,220 @@ begin
           coalesce(t.cat, '進貨貨款'), t.amt, t.who, '待匯款結清 ' || p_no)
   on conflict (id) do nothing;
   return jsonb_build_object('ok', true);
+end $$;
+
+
+-- ---------------------------------------------------------------------
+-- 款式整組存檔（新增／編輯商品的主要入口）
+-- p_style: {styleNo, name, cat, gender, price, cost?, photo?, note, low}
+-- p_skus:  [{no, size, color, qty?}]   qty 只在 SKU 是新的時候當初始庫存
+--   · 同款每個 SKU 共用 name/cat/gender/price/cost/photo/note/low
+--   · 這次沒列進來的舊 SKU → 下架（庫存紀錄都在）
+--   · 店員：可建新款、改品名分類圖片；售價只有新款可填，舊款的售價和進價只有老闆改得動
+-- ---------------------------------------------------------------------
+create or replace function frcs_save_style(p_style jsonb, p_skus jsonb, p_store text default null)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  uid      uuid := frcs_require_staff();
+  v_store  text := frcs_store_of(p_store);
+  v_owner  boolean := frcs_is_owner();
+  v_sn     text := trim(p_style->>'styleNo');
+  v_exists boolean;
+  v_price  numeric;
+  v_cost   numeric;
+  v_photo  text;
+  r        jsonb;
+  v_no     text;
+  v_new    boolean;
+  v_qty    int;
+  v_kept   text[] := '{}';
+  n_new    int := 0;
+  n_upd    int := 0;
+begin
+  if v_sn is null or v_sn = '' then
+    raise exception '款式編號不能空白' using errcode = '22023';
+  end if;
+  if jsonb_array_length(coalesce(p_skus, '[]'::jsonb)) = 0 then
+    raise exception '至少要有一個 SKU' using errcode = '22023';
+  end if;
+  v_exists := exists (select 1 from frcs_items where style_no = v_sn);
+
+  -- 售價／進價：老闆照送來的；店員只有新款可以填售價，進價一律不收
+  select price, cost, photo into v_price, v_cost, v_photo from frcs_items where style_no = v_sn limit 1;
+  if v_owner or not v_exists then
+    v_price := coalesce((p_style->>'price')::numeric, v_price, 0);
+  end if;
+  if v_owner and p_style ? 'cost' then
+    v_cost := coalesce((p_style->>'cost')::numeric, 0);
+  end if;
+  v_cost := coalesce(v_cost, 0);
+  if p_style ? 'photo' then v_photo := nullif(p_style->>'photo', ''); end if;
+
+  for r in select * from jsonb_array_elements(p_skus) loop
+    v_no := trim(r->>'no');
+    if v_no is null or v_no = '' then continue; end if;
+    -- 這個條碼若已屬於別的款式，擋掉
+    if exists (select 1 from frcs_items where no = v_no and style_no <> v_sn) then
+      raise exception '條碼 % 已經是別的款式在用', v_no using errcode = '22023';
+    end if;
+    v_new := not exists (select 1 from frcs_items where no = v_no);
+    insert into frcs_items (no, style_no, size, color, name, cat, gender, cost, price, low, photo, note, active)
+    values (v_no, v_sn, nullif(trim(r->>'size'), ''), nullif(trim(r->>'color'), ''),
+            coalesce(nullif(trim(p_style->>'name'), ''), '未命名'),
+            coalesce(nullif(p_style->>'cat', ''), '上衣'), coalesce(nullif(p_style->>'gender', ''), '男'),
+            v_cost, v_price, coalesce((p_style->>'low')::int, 1), v_photo, nullif(p_style->>'note', ''), true)
+    on conflict (no) do update set
+      style_no = excluded.style_no, size = excluded.size, color = excluded.color,
+      name = excluded.name, cat = excluded.cat, gender = excluded.gender,
+      cost = excluded.cost, price = excluded.price, low = excluded.low,
+      photo = excluded.photo, note = excluded.note, active = true, updated_at = now();
+    v_kept := v_kept || v_no;
+    if v_new then n_new := n_new + 1; else n_upd := n_upd + 1; end if;
+
+    v_qty := coalesce((r->>'qty')::int, 0);
+    if v_new and v_qty > 0 then
+      insert into frcs_stock_moves (id, store, no, kind, qty_delta, occurred_on, at_time, note, created_by)
+      values (md5('init:' || v_no || ':' || v_store)::uuid, v_store, v_no, 'intake', v_qty, frcs_today(),
+              to_char(now() at time zone 'Asia/Taipei', 'HH24:MI'), '建檔初始庫存', uid)
+      on conflict (id) do nothing;
+    end if;
+  end loop;
+
+  -- 沒列進來的舊 SKU 下架
+  update frcs_items set active = false, updated_at = now()
+  where style_no = v_sn and not (no = any(v_kept)) and active;
+
+  return jsonb_build_object('ok', true, 'styleNo', v_sn, 'created', n_new, 'updated', n_upd);
+end $$;
+
+-- 整款上架／下架
+create or replace function frcs_set_style_active(p_style_no text, p_active boolean)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  perform frcs_require_owner();
+  update frcs_items set active = p_active, updated_at = now() where style_no = p_style_no;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- 一款的最近異動（所有 SKU、本店）
+create or replace function frcs_style_history(p_style_no text, p_store text default null, p_limit int default 30)
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_store text;
+begin
+  perform frcs_require_staff();
+  v_store := frcs_store_of(p_store);
+  return (select coalesce(jsonb_agg(jsonb_build_object(
+            'date', m.occurred_on, 'time', m.at_time, 'kind', m.kind, 'qty', m.qty_delta,
+            'no', m.no, 'size', i.size, 'color', i.color, 'note', m.note, 'ref', m.ref
+          ) order by m.created_at desc), '[]'::jsonb)
+          from (select * from frcs_stock_moves where store = v_store
+                  and no in (select no from frcs_items where style_no = p_style_no)
+                order by created_at desc limit greatest(1, least(p_limit, 200))) m
+          join frcs_items i on i.no = m.no);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 作廢交易（限老闆、限當天）：銷售明細刪掉，庫存反向寫回，會員累積扣回，單留著標作廢
+-- ---------------------------------------------------------------------
+create or replace function frcs_void_txn(p_no text, p_reason text default null)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := frcs_require_owner();
+  t   frcs_txns%rowtype;
+  it  jsonb;
+begin
+  select * into t from frcs_txns where no = p_no;
+  if t.no is null then
+    raise exception '查無交易 %', p_no using errcode = '22023';
+  end if;
+  if t.voided then
+    return jsonb_build_object('ok', true, 'dup', true);
+  end if;
+  if t.sold_on <> frcs_today() then
+    raise exception '只能作廢當天的交易，之前的請走退貨' using errcode = '22023';
+  end if;
+  if exists (select 1 from frcs_day_close where store = t.store and closed_on = t.sold_on) then
+    raise exception '今天已經日結，不能再作廢' using errcode = '22023';
+  end if;
+
+  delete from frcs_sales where txn_no = p_no;
+  for it in select * from jsonb_array_elements(t.items) loop
+    insert into frcs_stock_moves (id, store, no, kind, qty_delta, occurred_on, at_time, note, ref, created_by)
+    values (md5('void:' || p_no || ':' || (it->>'no'))::uuid, t.store, it->>'no', 'void',
+            coalesce((it->>'qty')::int, 0), frcs_today(), to_char(now() at time zone 'Asia/Taipei', 'HH24:MI'),
+            '作廢 ' || p_no, p_no, uid)
+    on conflict (id) do nothing;
+  end loop;
+  if t.member_phone is not null then
+    update frcs_members set spent = greatest(0, spent - t.total) where phone = t.member_phone;
+  end if;
+  update frcs_txns set voided = true, void_reason = nullif(p_reason, ''), voided_at = now() where no = p_no;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 日結：各付款方式小計由後端算（不信前端），店員填實點現金
+-- p: {id, cashCounted, note, date?}
+-- ---------------------------------------------------------------------
+create or replace function frcs_day_close(p jsonb, p_store text default null)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  uid     uuid := frcs_require_staff();
+  v_store text := frcs_store_of(p_store);
+  v_date  date := coalesce(frcs_d(p->>'date'), frcs_today());
+  v_bypay jsonb;
+  v_cnt   int;
+  v_cash  numeric;
+  v_counted numeric := coalesce((p->>'cashCounted')::numeric, 0);
+begin
+  select coalesce(jsonb_object_agg(pay, amt), '{}'::jsonb), coalesce(sum(cnt), 0)
+    into v_bypay, v_cnt
+  from (select coalesce(pay, '其他') as pay, sum(total) as amt, count(*) as cnt
+        from frcs_txns where store = v_store and sold_on = v_date and not voided
+        group by coalesce(pay, '其他')) x;
+  v_cash := coalesce((v_bypay->>'現金')::numeric, 0);
+  insert into frcs_day_close (id, store, closed_on, by_pay, txn_count, cash_expected, cash_counted, diff, note, created_by)
+  values (coalesce((p->>'id')::uuid, gen_random_uuid()), v_store, v_date, v_bypay, v_cnt, v_cash, v_counted,
+          v_counted - v_cash, nullif(p->>'note', ''), uid)
+  on conflict (store, closed_on) do update set
+    by_pay = excluded.by_pay, txn_count = excluded.txn_count, cash_expected = excluded.cash_expected,
+    cash_counted = excluded.cash_counted, diff = excluded.diff, note = excluded.note, created_by = excluded.created_by;
+  return jsonb_build_object('ok', true, 'byPay', v_bypay, 'txnCount', v_cnt, 'cashExpected', v_cash,
+                            'cashCounted', v_counted, 'diff', v_counted - v_cash, 'closedOn', v_date);
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 會員紀錄：買過什麼、預購過什麼（全店）
+-- ---------------------------------------------------------------------
+create or replace function frcs_member_history(p_phone text, p_limit int default 50)
+returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_owner boolean;
+  v_phone text := regexp_replace(coalesce(p_phone, ''), '\D', '', 'g');
+begin
+  perform frcs_require_staff();
+  v_owner := frcs_is_owner();
+  return jsonb_build_object(
+    'txns', (select coalesce(jsonb_agg(jsonb_build_object(
+               'no', t.no, 'date', t.sold_on, 'time', t.at_time, 'total', t.total, 'pay', t.pay, 'store', t.store,
+               'voided', t.voided,
+               'items', (select coalesce(jsonb_agg(x - 'cost'), '[]'::jsonb) from jsonb_array_elements(t.items) x)
+             ) order by t.created_at desc), '[]'::jsonb)
+             from (select * from frcs_txns where member_phone = v_phone
+                   order by created_at desc limit greatest(1, least(p_limit, 200))) t),
+    'preorders', (select coalesce(jsonb_agg(jsonb_build_object(
+                    'no', p.no, 'sku', p.sku, 'name', i.name, 'size', i.size, 'color', i.color,
+                    'qty', p.qty, 'price', p.price, 'deposit', p.deposit, 'stage', p.stage, 'createdAt', p.created_on
+                  ) order by p.created_at desc), '[]'::jsonb)
+                  from frcs_preorders p left join frcs_items i on i.no = p.sku
+                  where p.member_phone = v_phone)
+  );
 end $$;
 
 -- 全店合併（本月）
