@@ -642,8 +642,8 @@ const PO_STAGES=["已訂購","已付款","已出貨","已到貨","已配送","�
 /* 跟 FEEDO ERP 同一套做法：所有表 deny-all，前端只呼叫 frcs_* RPC。
    這兩個值從 Supabase Dashboard → Project Settings → API 複製。anon key 是公開的，
    沒有 frcs_staff 帳號的人拿到也做不了事。 */
-const SUPABASE_URL  = "";
-const SUPABASE_ANON = "";
+const SUPABASE_URL  = "https://fiowuwokiurmaqoxjvxi.supabase.co";
+const SUPABASE_ANON = "sb_publishable_UIXRfDA085gRwjwQY0USiw_Xc3GJiSW";
 const PHOTO_BUCKET  = "frcs-photos";
 const sb = (SUPABASE_URL && window.supabase) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON) : null;
 
