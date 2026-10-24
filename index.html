@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>FRCS INVENTORY</title>
+<title>DIM INVENTORY</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
@@ -314,14 +314,14 @@
 <!-- 登入 -->
 <div class="lock" id="lockScreen">
   <div class="box">
-    <div class="brand">FRCS<small>INVENTORY & LEDGER</small></div>
+    <div class="brand">DIM<small>INVENTORY & LEDGER</small></div>
     <label class="fld">帳號 EMAIL</label>
     <input class="f" id="lg_email" type="email" autocomplete="username" inputmode="email" placeholder="you@example.com">
     <label class="fld">密碼 PASSWORD</label>
     <input class="f" id="lg_pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
     <button class="btn" id="lg_btn" style="margin-top:16px" onclick="signIn()">登入</button>
     <div class="err" id="lg_err"></div>
-    <div class="hint">帳號由老闆在 Supabase 建立。登入後老闆帳號要再輸 PIN 才看得到成本與帳務。</div>
+    <div class="hint">帳號由老闆建立。登入後老闆帳號要再輸 PIN 才看得到成本與帳務。</div>
   </div>
 </div>
 
@@ -329,7 +329,7 @@
 
   <div class="masthead">
     <div class="top">
-      <div class="brand"><span id="brandName">FRCS</span><small>INVENTORY & LEDGER</small></div>
+      <div class="brand"><span id="brandName">DIM</span><small>INVENTORY & LEDGER</small></div>
       <div style="text-align:right">
         <div class="dateline" id="dateline">—</div>
         <div class="dateline" id="syncDot" onclick="openSettings()" style="cursor:pointer;margin-top:2px">○ 未連線</div>
@@ -590,7 +590,7 @@ const state={
   role:'staff',            // 畫面模式：'staff' | 'owner'（owner 要帳號是 owner 且輸過 PIN）
   account:null,            // 登入帳號 {name, role}
   store:'FRCS',
-  stores:[{code:'FRCS',name:'FRCS 台南'}],
+  stores:[{code:'FRCS',name:'DIM'}],
   showInactive:false,
   mode:'pos',
   posTab:'register',
@@ -906,7 +906,8 @@ function thumbHtml(s, cls){
 /* ---- 店別切換(只有多店時才顯示) ---- */
 function updateBrand(){
   const el=document.getElementById('brandName');
-  if(el) el.textContent = state.store || 'FRCS';
+  const st=(state.stores||[]).find(x=>x.code===state.store);
+  if(el) el.textContent = (st&&st.name) || state.store || 'DIM';
 }
 function renderStoreBar(){
   updateBrand();
@@ -1513,7 +1514,7 @@ async function printReceipt(no,items,t,pay,mem,cashInfo){
     member: mem?mem.name:null,
     items: items.map(c=>({name:c.name, qty:c.qty, price:c.price})),
     sub:t.sub, memOff:t.memOff||0, manOff:t.manOff||0, grand:t.grand,
-    pay, footer:'謝謝惠顧 · FRCS',
+    pay, footer:'謝謝惠顧 · DIM',
     kick: pay==='現金',        // 收現金才彈錢箱,和列印同一次傳輸
   };
   if(cashInfo && cashInfo.cash){ payload.cash=cashInfo.cash; payload.change=cashInfo.change; }
@@ -1523,7 +1524,7 @@ async function printReceipt(no,items,t,pay,mem,cashInfo){
   /* 沒有橋接程式(iPad 等)-> 退回瀏覽器列印 */
   const ra=document.getElementById('receiptArea');
   ra.innerHTML=`<div class="receipt">
-    <div class="rc"><h4>FRCS</h4><div>For Restless City Souls</div><div>Tainan</div></div>
+    <div class="rc"><h4>DIM</h4><div>Tainan</div></div>
     <div class="rline"></div>
     <div>單號 ${no}</div><div>${new Date().toLocaleString('zh-TW')}</div>
     ${mem?`<div>會員 ${mem.name}</div>`:''}
@@ -1536,7 +1537,7 @@ async function printReceipt(no,items,t,pay,mem,cashInfo){
     <div class="rtot"><span>應收</span><span>${money(t.grand)}</span></div>
     <div class="ri"><span>付款</span><span>${pay}</span></div>
     <div class="rline"></div>
-    <div class="rc">謝謝惠顧 · FRCS</div>
+    <div class="rc">謝謝惠顧 · DIM</div>
   </div>`;
   setTimeout(()=>window.print(),300);
   return false;   // 走的是瀏覽器列印,錢箱沒被觸發
@@ -1803,7 +1804,7 @@ function renderLow(){
     </div></div>`).join('');
 }
 function copyRestock(){
-  const lines=['【FRCS 叫貨清單】'+today()];
+  const lines=['【DIM 叫貨清單】'+today()];
   state.styles.filter(s=>s.active!==false&&s.qty<=s.low).forEach(s=>
     lines.push(`${s.no} ${skuLabel(s)} — 剩 ${s.qty}`));
   navigator.clipboard?.writeText(lines.join('\n'));

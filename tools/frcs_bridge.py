@@ -124,8 +124,8 @@ def money(n):
 
 def receipt_bytes(p):
     out = INIT
-    out += ALIGN['c'] + BIG_ON + BOLD_ON + 'FRCS\n'.encode(ENC) + BIG_OFF + BOLD_OFF
-    out += 'For Restless City Souls\nTainan\n'.encode(ENC)
+    out += ALIGN['c'] + BIG_ON + BOLD_ON + 'DIM\n'.encode(ENC) + BIG_OFF + BOLD_OFF
+    out += 'Tainan\n'.encode(ENC)
     out += ('-' * COLS + '\n').encode(ENC)
     out += ALIGN['l']
     out += lr('單號 ' + str(p.get('no', '')), '').encode(ENC)
@@ -149,7 +149,7 @@ def receipt_bytes(p):
         out += lr('收現', money(p['cash'])).encode(ENC)
         out += lr('找零', money(p.get('change', 0))).encode(ENC)
     out += ('-' * COLS + '\n').encode(ENC)
-    out += ALIGN['c'] + (str(p.get('footer', '謝謝惠顧 · FRCS')) + '\n').encode(ENC)
+    out += ALIGN['c'] + (str(p.get('footer', '謝謝惠顧 · DIM')) + '\n').encode(ENC)
     out += b'\n\n\n' + CUT
     if p.get('kick'):
         out += KICK
