@@ -125,7 +125,7 @@ def money(n):
 def receipt_bytes(p):
     out = INIT
     out += ALIGN['c'] + BIG_ON + BOLD_ON + 'DIM\n'.encode(ENC) + BIG_OFF + BOLD_OFF
-    out += 'Tainan\n'.encode(ENC)
+    out += 'For Restless City Souls\nTainan\n'.encode(ENC)
     out += ('-' * COLS + '\n').encode(ENC)
     out += ALIGN['l']
     out += lr('單號 ' + str(p.get('no', '')), '').encode(ENC)

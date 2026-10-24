@@ -1524,7 +1524,7 @@ async function printReceipt(no,items,t,pay,mem,cashInfo){
   /* 沒有橋接程式(iPad 等)-> 退回瀏覽器列印 */
   const ra=document.getElementById('receiptArea');
   ra.innerHTML=`<div class="receipt">
-    <div class="rc"><h4>DIM</h4><div>Tainan</div></div>
+    <div class="rc"><h4>DIM</h4><div>For Restless City Souls</div><div>Tainan</div></div>
     <div class="rline"></div>
     <div>單號 ${no}</div><div>${new Date().toLocaleString('zh-TW')}</div>
     ${mem?`<div>會員 ${mem.name}</div>`:''}
