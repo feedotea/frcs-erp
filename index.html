@@ -966,15 +966,28 @@ function refreshCurrentView(){
 const BRIDGE_LS='frcs_bridge_url';
 let DRAWER_URL = localStorage.getItem(BRIDGE_LS) || 'http://localhost:9999';
 let drawerReady=null;   // null=未測 / true=可用 / false=不可用
+let labelReady=false;   // 橋接程式有接貼紙機才 true
 
 async function drawerPing(){
   try{
     const c=new AbortController(); setTimeout(()=>c.abort(),1500);
     const r=await fetch(DRAWER_URL+'/ping',{signal:c.signal});
     const j=await r.json();
-    drawerReady=!!j.ok;
-  }catch(e){ drawerReady=false; }
+    drawerReady=!!j.ok; labelReady=!!j.label;
+  }catch(e){ drawerReady=false; labelReady=false; }
   return drawerReady;
+}
+/* 標籤直送貼紙機。回 true = 已交給貼紙機；false = 沒橋接或沒貼紙機，呼叫端退回瀏覽器列印 */
+async function bridgeLabels(items){
+  if(!labelReady) return false;
+  try{
+    const c=new AbortController(); setTimeout(()=>c.abort(),15000);
+    const r=await fetch(DRAWER_URL+'/label',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({items}),signal:c.signal});
+    const j=await r.json();
+    if(!j.ok){ toast('貼紙機:'+(j.message||'失敗')); return false; }
+    return true;
+  }catch(e){ return false; }
 }
 
 /* 送收據到本機出單機。回傳 true 表示已交由 ESC/POS 印出。
@@ -1674,17 +1687,33 @@ function advancePreTrack(no){
 /* ---------------- labels ---------------- */
 function renderLabels(){
   const el=document.getElementById('lblPickList');
-  el.innerHTML=state.styles.filter(s=>s.active!==false).map(s=>`<label class="lblpick">
+  const direct=labelReady;
+  el.innerHTML=(direct?`<div class="hint" style="color:var(--green);margin-bottom:8px">✓ 已接貼紙機,按列印直接出貼紙。張數預設 = 庫存數。</div>`:'')+
+    state.styles.filter(s=>s.active!==false).map(s=>`<label class="lblpick">
     <input type="checkbox" class="lblchk" data-no="${s.no}" ${s.qty>0?'checked':''}>
     <span style="flex:1">${skuLabel(s)}</span>
     <span style="color:var(--muted)">${s.no}</span>
-    <span style="width:34px;text-align:right">×${s.qty}</span>
+    ${direct?`<input class="f lblqty" type="number" inputmode="numeric" data-no="${s.no}" value="${Math.max(1,s.qty)}" style="width:52px;padding:4px;text-align:center">`
+            :`<span style="width:34px;text-align:right">×${s.qty}</span>`}
   </label>`).join('');
 }
 function lblAll(on){document.querySelectorAll('.lblchk').forEach(c=>c.checked=on);}
-function printLabels(){
+async function printLabels(){
   const picks=[...document.querySelectorAll('.lblchk:checked')];
   if(!picks.length){toast('請至少勾選一項');return;}
+  /* 有貼紙機就直送,不跳列印視窗 */
+  if(labelReady){
+    const items=picks.map(chk=>{
+      const s=findStyle(chk.getAttribute('data-no'));
+      const q=+(document.querySelector(`.lblqty[data-no="${s.no}"]`)?.value||1)||1;
+      return {name:s.name,variant:variantLabel(s),no:s.no,price:s.price,qty:q};
+    });
+    const total=items.reduce((a,i)=>a+i.qty,0);
+    if(total>50 && !window.confirm(`要印 ${total} 張貼紙,確定?`))return;
+    toast('送出 '+total+' 張…');
+    if(await bridgeLabels(items)){ toast('貼紙機已印 '+total+' 張'); return; }
+    toast('貼紙機沒回應,改用瀏覽器列印');
+  }
   const area=document.getElementById('printArea');
   area.innerHTML='<div class="lblgrid">'+picks.map(chk=>{
     const s=findStyle(chk.getAttribute('data-no'));
