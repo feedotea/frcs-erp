@@ -510,7 +510,10 @@
       <div id="vendorBox"></div>
       <div class="row-between">
         <h2 class="sec">採購 PURCHASE ORDERS</h2>
-        <button class="btn sm" style="width:auto;margin:0" onclick="openNewPO()">＋ 新採購單</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn ghost sm" style="width:auto;margin:0" onclick="openSplitFreight()">分攤運費</button>
+          <button class="btn sm" style="width:auto;margin:0" onclick="openNewPO()">＋ 新採購單</button>
+        </div>
       </div>
       <div class="filterbar" id="poFilter"></div>
       <div id="poList" style="margin-top:10px"></div>
@@ -3152,6 +3155,79 @@ function poSkuNo(styleNo,c,z,used){
 }
 
 /* ================= 廠商 VENDORS ================= */
+
+function openSplitFreight(){
+  const cands=state.purchases.filter(p=>p.stage!=='已入倉'&&p.items.length);
+  if(!cands.length){toast('沒有可分攤的採購單(要有商品、還沒入倉)');return;}
+  splitSel={pos:new Set(cands.filter(p=>!p.freight&&!p.duty).map(p=>p.no)), by:'units'};
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>分攤運費關稅</h3><div class="sub">勾同一趟寄的單,總額會拆進各張單</div>
+    <div id="sf_list" style="margin-top:8px"></div>
+    <div class="grid2">
+      <div><label class="fld">總運費 NT$</label><input class="f" id="sf_freight" type="number" inputmode="numeric" placeholder="0" oninput="splitPreview()"></div>
+      <div><label class="fld">總關稅 NT$</label><input class="f" id="sf_duty" type="number" inputmode="numeric" placeholder="0" oninput="splitPreview()"></div>
+    </div>
+    <label class="fld">怎麼拆</label>
+    <div class="chips">
+      <div class="chip on" id="sf_by_units" onclick="splitBy('units')">按件數</div>
+      <div class="chip" id="sf_by_goods" onclick="splitBy('goods')">按貨款金額</div>
+    </div>
+    <div class="hint">按件數:每件攤一樣多,衣服大小差不多時用。按貨款:貴的多攤,有外套又有小配件時用。</div>
+    <div class="ledger" id="sf_preview" style="margin-top:10px"></div>
+    <button class="btn green" style="margin-top:14px" onclick="doSplitFreight()">寫進各張單</button>
+    <div class="hint">會覆蓋這幾張單原本的運費關稅。入倉前都可以重算。</div>`);
+  splitRenderList(cands);
+}
+
+function splitRenderList(cands){
+  const el=document.getElementById('sf_list'); if(!el)return;
+  el.innerHTML=cands.map(p=>{const t=poTotals(p);return `<label class="lblpick" style="padding:4px 0">
+    <input type="checkbox" ${splitSel.pos.has(p.no)?'checked':''} onchange="splitToggle('${p.no}',this.checked)">
+    <span style="flex:1">${p.no} · ${p.vendor}</span>
+    <span style="color:var(--muted)">${t.units} 件 · ${money(t.goods)}${(p.freight||p.duty)?' · 已有 '+money(p.freight+p.duty):''}</span>
+  </label>`;}).join('');
+  splitPreview();
+}
+
+function splitToggle(no,on){ if(on)splitSel.pos.add(no); else splitSel.pos.delete(no); splitPreview(); }
+
+function splitBy(b){ splitSel.by=b; document.getElementById('sf_by_units').classList.toggle('on',b==='units'); document.getElementById('sf_by_goods').classList.toggle('on',b==='goods'); splitPreview(); }
+
+function splitCalc(){
+  const pos=state.purchases.filter(p=>splitSel.pos.has(p.no));
+  const F=+val('sf_freight')||0, D=+val('sf_duty')||0;
+  const w=pos.map(p=>{const t=poTotals(p);return splitSel.by==='units'?t.units:t.goods;});
+  const W=w.reduce((a,b)=>a+b,0)||1;
+  /* 四捨五入後最後一張補差,總和一定等於輸入 */
+  let fLeft=F,dLeft=D;
+  return pos.map((p,i)=>{
+    const last=i===pos.length-1;
+    const f=last?fLeft:Math.round(F*w[i]/W), d=last?dLeft:Math.round(D*w[i]/W);
+    fLeft-=f; dLeft-=d;
+    return {p,f,d,units:poTotals(p).units};
+  });
+}
+
+function splitPreview(){
+  const el=document.getElementById('sf_preview'); if(!el)return;
+  const rows=splitCalc();
+  if(!rows.length){el.innerHTML='<div class="hint">先勾單</div>';return;}
+  el.innerHTML=rows.map(r=>`<div class="lr"><span class="l">${r.p.no} · ${r.p.vendor}</span>
+    <span>運 ${r.f.toLocaleString()} · 稅 ${r.d.toLocaleString()}${r.units?` · 每件 +${Math.round((r.f+r.d)/r.units)}`:''}</span></div>`).join('');
+}
+
+function doSplitFreight(){
+  const rows=splitCalc();
+  if(!rows.length){toast('先勾單');return;}
+  if(!(+val('sf_freight')||0)&&!(+val('sf_duty')||0)){toast('填總運費或關稅');return;}
+  rows.forEach(r=>{ r.p.freight=r.f; r.p.duty=r.d; api('frcs_upsert_purchase',S({p:r.p})); });
+  closeModal(); renderPurchase(); toast(`已攤進 ${rows.length} 張採購單`);
+}
+
+/* ================= 多張採購單分攤運費關稅 ================= */
+/* 同一趟寄回來的貨常常是好幾家廠商、一張運單。
+   各家各開一張採購單記貨款,運費關稅在這裡一次填,按件數或按貨款拆進每張單的 freight / duty。 */
+let splitSel={pos:new Set(), by:'units'};
 
 /* ---------------- util ---------------- */
 function pick(el,group){el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');state.picks[group]=el.textContent.trim();}
