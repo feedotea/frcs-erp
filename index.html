@@ -1689,13 +1689,12 @@ function advancePreTrack(no){
 function renderLabels(){
   const el=document.getElementById('lblPickList');
   const direct=labelReady;
-  el.innerHTML=(direct?`<div class="hint" style="color:var(--green);margin-bottom:8px">✓ 已接貼紙機,按列印直接出貼紙。張數預設 = 庫存數。</div>`:'')+
+  el.innerHTML=`<div class="hint" style="margin-bottom:8px;${direct?'color:var(--green)':''}">${direct?'✓ 已接貼紙機,按列印直接出貼紙。':'沒接貼紙機,會用瀏覽器列印。'}右邊填每項要印幾張,預設 = 庫存數。</div>`+
     state.styles.filter(s=>s.active!==false).map(s=>`<label class="lblpick">
     <input type="checkbox" class="lblchk" data-no="${s.no}" ${s.qty>0?'checked':''}>
     <span style="flex:1">${skuLabel(s)}</span>
     <span style="color:var(--muted)">${s.no}</span>
-    ${direct?`<input class="f lblqty" type="number" inputmode="numeric" data-no="${s.no}" value="${Math.max(1,s.qty)}" style="width:52px;padding:4px;text-align:center">`
-            :`<span style="width:34px;text-align:right">×${s.qty}</span>`}
+    <input class="f lblqty" type="number" inputmode="numeric" min="1" data-no="${s.no}" value="${Math.max(1,s.qty)}" style="width:52px;padding:4px;text-align:center" onclick="event.preventDefault()">
   </label>`).join('');
 }
 function lblAll(on){document.querySelectorAll('.lblchk').forEach(c=>c.checked=on);}
@@ -1716,21 +1715,24 @@ async function printLabels(){
     toast('貼紙機沒回應,改用瀏覽器列印');
   }
   const area=document.getElementById('printArea');
-  area.innerHTML='<div class="lblgrid">'+picks.map(chk=>{
+  /* 瀏覽器列印:每項照張數重複 */
+  area.innerHTML='<div class="lblgrid">'+picks.flatMap(chk=>{
     const s=findStyle(chk.getAttribute('data-no'));
-    return `<div class="lblcard">
+    const q=Math.min(200,+(document.querySelector(`.lblqty[data-no="${s.no}"]`)?.value||1)||1);
+    const card=`<div class="lblcard">
       <div class="lname">${s.name}</div>
       <div class="ln">${variantLabel(s)?variantLabel(s)+' · ':''}${s.gender}${s.cat}</div>
       <svg class="bc" data-code="${s.no}"></svg>
       <div class="ln">${money(s.price)}</div>
     </div>`;
+    return Array(q).fill(card);
   }).join('')+'</div>';
   area.querySelectorAll('svg.bc').forEach(svg=>{
     try{ JsBarcode(svg,svg.getAttribute('data-code'),
       {format:"CODE128",width:1.6,height:40,fontSize:12,margin:2,displayValue:true}); }
     catch(e){ svg.outerHTML='<div class="ln">'+svg.getAttribute('data-code')+'</div>'; }
   });
-  toast('已生成 '+picks.length+' 張標籤');
+  toast('已生成 '+area.querySelectorAll('.lblcard').length+' 張標籤');
   setTimeout(()=>window.print(),400);
 }
 
