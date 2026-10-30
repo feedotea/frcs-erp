@@ -449,7 +449,11 @@
     <!-- 盤點 -->
     <div class="view" id="v-count">
       <h2 class="sec">盤點 STOCKTAKE</h2>
-      <div class="hint">填入實際清點數,存檔後更新帳面庫存。</div>
+      <div class="hint">填入實際清點數,存檔後更新帳面庫存。可以搜尋後只盤一部分,存檔只動有改的。</div>
+      <div class="scanbox" style="border-color:var(--line);margin-top:10px">
+        <span class="scanic">⌕</span>
+        <input class="f scanin" id="countSearch" placeholder="搜尋編號、品名或掃條碼" oninput="renderCount()" autocomplete="off">
+      </div>
       <div id="countList" style="margin-top:10px"></div>
       <button class="btn" style="margin-top:10px" onclick="saveCount()">存檔並更新庫存</button>
     </div>
@@ -1771,7 +1775,9 @@ function fillIntakeSelect(){
 
 function renderCount(){
   const el=document.getElementById('countList');
-  const groups=styleGroups(false);
+  const q=(document.getElementById('countSearch')?.value||'').trim();
+  const groups=styleGroups(false).filter(g=>!q||g.styleNo.includes(q)||g.name.includes(q)||g.skus.some(s=>s.no.includes(q)));
+  if(!groups.length){el.innerHTML=`<div class="empty">${q?'查無符合商品':'還沒有商品'}</div>`;return;}
   el.innerHTML=groups.map(g=>`<div style="margin-bottom:10px">
     <div class="style-no" style="margin-bottom:4px">${g.styleNo} · ${g.name}</div>
     ${g.skus.filter(s=>s.active!==false).map(s=>`<div class="cntrow">
