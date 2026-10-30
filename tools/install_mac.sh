@@ -2,6 +2,7 @@
 # DIM 收銀 Mac 一鍵安裝：抓橋接程式、找出單機 IP、設開機自動跑、印一張測試單
 #   curl -fsSL https://raw.githubusercontent.com/feedotea/frcs-erp/main/tools/install_mac.sh | bash
 #   也可以直接指定 IP：  ... | bash -s 192.168.1.60
+#   連貼紙機一起：        ... | bash -s 192.168.1.60 192.168.1.61 40x30   （出單機 貼紙機 貼紙尺寸）
 set -e
 BR="${FRCS_BRANCH:-main}"
 RAW="https://raw.githubusercontent.com/feedotea/frcs-erp/$BR/tools"
@@ -13,6 +14,8 @@ echo "① 下載橋接程式…"
 curl -fsSL "$RAW/frcs_bridge.py" -o "$DIR/frcs_bridge.py"
 
 IP="${1:-}"
+LABEL_IP="${2:-}"
+LABEL_SIZE="${3:-40x30}"
 if [ -z "$IP" ]; then
   echo "② 在區網找出單機（9100 埠）…"
   IP=$(python3 - <<'EOF'
@@ -61,8 +64,8 @@ cat > "$PLIST" <<EOF
   <key>EnvironmentVariables</key>
   <dict>
     <key>FRCS_PRINTER</key><string>$IP</string>
-    <key>FRCS_LABEL</key><string></string>
-    <key>FRCS_LABEL_SIZE</key><string>40x30</string>
+    <key>FRCS_LABEL</key><string>$LABEL_IP</string>
+    <key>FRCS_LABEL_SIZE</key><string>$LABEL_SIZE</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
