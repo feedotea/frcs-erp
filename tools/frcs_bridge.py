@@ -23,7 +23,7 @@ FRCS 收銀橋 —— 讓 FRCS INVENTORY 網頁可以印收據、開錢箱、印
   FRCS_PRINTER=192.168.1.60 python3 tools/frcs_bridge.py
 
 只綁 127.0.0.1：同一台電腦上的瀏覽器才叫得到。CORS 只放行 FRCS 的站台。
-中文用 GB18030 送（大陸機的中文模式），收據寬 80mm = 48 個半形字。
+中文用 Big5（cp950）送：自檢頁 Traditional Character Mode: YES。收據寬 80mm = 48 個半形字。
 """
 import http.server
 import json
@@ -40,7 +40,7 @@ BAUD = int(os.environ.get('FRCS_BAUD', '19200'))       # TP805 實測 19200，96
 LABEL = os.environ.get('FRCS_LABEL', '')               # 貼紙機 IP
 LABEL_PORT = int(os.environ.get('FRCS_LABEL_PORT', '9100'))
 LABEL_SIZE = os.environ.get('FRCS_LABEL_SIZE', '40x30')
-ENC = 'gb18030'
+ENC = 'cp950'                                           # TP805 自檢頁 Traditional Character Mode: YES → Big5
 COLS = 48                                               # 80mm 紙、Font A 每行字數
 
 ORIGINS = {
