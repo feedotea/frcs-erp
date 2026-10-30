@@ -12,7 +12,7 @@ begin
   foreach t in array array[
     'frcs_staff','frcs_stores','frcs_config','frcs_items','frcs_stock_moves','frcs_members',
     'frcs_txns','frcs_sales','frcs_preorders','frcs_purchases','frcs_expenses','frcs_topay',
-    'frcs_returns','frcs_transfers','frcs_day_close']
+    'frcs_returns','frcs_transfers','frcs_day_close','frcs_vendors']
   loop
     execute format('alter table %I enable row level security', t);
     execute format('alter table %I force row level security', t);

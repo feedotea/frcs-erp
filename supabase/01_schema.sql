@@ -194,8 +194,20 @@ create table if not exists frcs_preorders (
 );
 
 -- ---------------------------------------------------------------------
--- 7. 採購單（明細放 jsonb，跟前端結構一樣）
+-- 7. 廠商 ＋ 採購單（明細放 jsonb，跟前端結構一樣）
 -- ---------------------------------------------------------------------
+create table if not exists frcs_vendors (
+  name       text primary key,                    -- 廠商名（例如 Seoul / 東大門 A）
+  contact    text,                                -- 聯絡人
+  phone      text,                                -- 電話 / LINE / 微信
+  currency   text not null default 'TWD',
+  rate       numeric not null default 1,          -- 預設匯率，開單時帶入
+  lead_days  int,                                 -- 下單到到貨大約幾天
+  note       text,
+  active     boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists frcs_purchases (
   no          text primary key,
   store       text not null references frcs_stores(code),
@@ -207,7 +219,9 @@ create table if not exists frcs_purchases (
   stage       text not null default '已訂購',
   ordered_on  text,
   eta         text,
-  items       jsonb not null default '[]'::jsonb,
+  items       jsonb not null default '[]'::jsonb,   -- [{no, styleNo, size, color, name, cat, gender, unitFx, qty, price}]
+  note        text,
+  tracking    text,                                 -- 物流單號
   received_on date,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()

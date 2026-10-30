@@ -507,9 +507,10 @@
 
     <!-- 採購 -->
     <div class="view" id="v-purchase">
+      <div id="vendorBox"></div>
       <div class="row-between">
         <h2 class="sec">採購 PURCHASE ORDERS</h2>
-        <button class="btn ghost sm" style="width:auto;margin:0" onclick="openNewPO()">＋ 新採購單</button>
+        <button class="btn sm" style="width:auto;margin:0" onclick="openNewPO()">＋ 新採購單</button>
       </div>
       <div class="filterbar" id="poFilter"></div>
       <div id="poList" style="margin-top:10px"></div>
@@ -620,6 +621,7 @@ const state={
   transfers:[],
   picks:{pay:"現金"},
   purchases:[],
+  vendors:[],
 };
 
 /* ---- 成本遮蔽:唯一的權限判斷 ---- */
@@ -804,6 +806,7 @@ async function cloudLoad(silent){
     state.returns   = (d.returns||[]).map(r=>({...r, qty:Number(r.qty)||0, amt:Number(r.amt)||0}));
     state.intakeLog = (d.intakeLog||[]).map(i=>({...i, qty:Number(i.qty)||0}));
     state.dayClose  = d.dayClose||null;
+    state.vendors   = (d.vendors||[]).map(v=>({...v, rate:Number(v.rate)||1}));
     /* 店員帳號永遠是店員畫面 */
     if(!state.account || state.account.role!=='owner') state.role='staff';
     setSync('ok');
@@ -2025,6 +2028,7 @@ function doImport(){
 
 /* ================= 採購 PURCHASE ORDERS ================= */
 function renderPurchase(){
+  renderVendors();
   state.poFilter=state.poFilter||'全部';
   document.getElementById('poFilter').innerHTML=['全部',...PO_STAGES].map(o=>
     `<div class="fchip ${state.poFilter===o?'on':''}" onclick="setPoFilter('${o}')">${o}</div>`).join('');
@@ -2036,23 +2040,26 @@ function renderPurchase(){
     const idx=PO_STAGES.indexOf(p.stage);
     const next=idx<PO_STAGES.length-1?PO_STAGES[idx+1]:null;
     const received=p.stage==='已入倉';
+    const vd=findVendor(p.vendor);
     const track=PO_STAGES.map((st,i)=>
       `<span class="tag ${i<=idx?'pre':''}" style="${i<=idx?'':'opacity:.3'}">${st}</span>`).join(' ');
     const items=p.items.map(i=>
       `<div class="porow">
-        <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12px">${i.name}</div>
+        <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12px">${poItemLabel(i)}</div>
           <div class="style-no">${i.no} · ${i.gender}${i.cat}</div></div>
         <div class="mono" style="font-size:11px;text-align:right">
           <div>${p.currency} ${i.unitFx.toLocaleString()} ×${i.qty}</div>
           <div style="color:var(--gilt)">單件成本 ${money(poUnitCost(p,i))}</div>
         </div>
-      </div>`).join('');
+      </div>`).join('')||`<div class="hint" style="padding:6px 0">還沒有商品,按「編輯」加入</div>`;
     return `<div class="card ${received?'done':'pending'}">
       <div class="style-head">
         <div style="flex:1;min-width:0">
-          <div class="style-no">${p.no}</div>
-          <div class="style-name" style="font-size:14px">${p.vendor}</div>
-          <div class="style-meta">下單 ${p.ordered} · 預計 ${p.eta} · ${t.units} 件</div>
+          <div class="style-no">${p.no} · ${p.stage}</div>
+          <div class="style-name">${p.vendor||'—'}</div>
+          ${vd&&(vd.contact||vd.phone)?`<div class="style-meta">${[vd.contact,vd.phone].filter(Boolean).join(' · ')}</div>`:''}
+          <div class="style-meta">下單 ${shortDate(p.ordered)} · 預計 ${p.eta&&p.eta!=='—'?shortDate(p.eta):'—'} · ${t.units} 件${p.tracking?' · 物流 '+p.tracking:''}</div>
+          ${p.note?`<div class="style-meta">${p.note}</div>`:''}
         </div>
         <div style="text-align:right">
           <div class="mono" style="font-size:15px;font-weight:700">${money(t.total)}</div>
@@ -2102,8 +2109,9 @@ function receivePO(no){
     const ex=findStyle(i.no);
     if(ex){ ex.qty+=i.qty; ex.cost=cost; ex.active=true; updated++; }
     else{
-      state.styles.unshift({no:i.no,styleNo:i.no,size:'',color:'',name:i.name,cat:i.cat,gender:i.gender,
-        cost, price:i.price||Math.round(cost*2.8/10)*10, qty:i.qty, low:1, photo:'', note:'', active:true, elsewhere:[]});
+      const g=findGroup(i.styleNo||i.no);
+      state.styles.unshift({no:i.no,styleNo:i.styleNo||i.no,size:i.size||'',color:i.color||'',name:i.name,cat:i.cat,gender:i.gender,
+        cost, price:i.price||(g?g.price:0)||Math.round(cost*2.8/10)*10, qty:i.qty, low:1, photo:g?g.photo:'', note:'', active:true, elsewhere:[]});
       created++;
     }
     state.intakeLog.unshift({date:today(),time:nowHM(),no:i.no,name:i.name,qty:i.qty,kind:'receive'});
@@ -2127,117 +2135,126 @@ function receivePO(no){
 }
 
 function openNewPO(){
+  if(!(state.vendors||[]).length){ toast('先建一個廠商'); openVendorModal(); return; }
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>新採購單</h3><div class="sub">建立後可逐項加入商品</div>
-    <label class="fld">採購單號</label><input class="f" id="po_no" placeholder="PO26-05">
-    <label class="fld">廠商</label><input class="f" id="po_vendor" placeholder="Seoul / 東大門 A">
-    <div class="grid2">
-      <div><label class="fld">幣別</label><select class="f" id="po_cur"><option>KRW</option><option>USD</option><option>TWD</option></select></div>
-      <div><label class="fld">匯率</label><input class="f" id="po_rate" type="number" step="0.0001" value="0.0235" inputmode="decimal"></div>
-    </div>
-    <div class="grid2">
-      <div><label class="fld">運費 NT$</label><input class="f" id="po_freight" type="number" inputmode="numeric" placeholder="0"></div>
-      <div><label class="fld">關稅 NT$</label><input class="f" id="po_duty" type="number" inputmode="numeric" placeholder="0"></div>
-    </div>
-    <div class="grid2">
-      <div><label class="fld">下單日</label><input class="f" id="po_ordered" type="date"></div>
-      <div><label class="fld">預計到貨</label><input class="f" id="po_eta" type="date"></div>
-    </div>
-    <button class="btn" style="margin-top:14px" onclick="doNewPO()">建立採購單</button>
-    <div class="hint">KRW 參考匯率約 0.0235(1 韓元 ≈ 0.0235 台幣),請依實際匯率填寫。</div>`);
+    <h3>新採購單</h3><div class="sub">建立後再逐項加入商品(可帶顏色尺寸)</div>
+    <label class="fld">採購單號</label><input class="f" id="po_no" value="${nextPONo()}">
+    ${poHeaderFields('po',null)}
+    <button class="btn" style="margin-top:14px" onclick="doNewPO()">建立採購單</button>`);
+  setTimeout(()=>poVendorChanged('po'),50);
 }
 function doNewPO(){
   const no=val('po_no').trim();
   if(!no){toast('請填單號');return;}
   if(state.purchases.find(x=>x.no===no)){toast('此單號已存在');return;}
-  const po={no,vendor:val('po_vendor')||'—',currency:val('po_cur'),
-    rate:+val('po_rate')||1,freight:+val('po_freight')||0,duty:+val('po_duty')||0,
-    stage:'已訂購',ordered:val('po_ordered')||today(),eta:val('po_eta')||'—',items:[]};
+  const po=readPOHeader('po',{no,stage:'已訂購',items:[]});
   state.purchases.unshift(po);
   api('frcs_upsert_purchase',S({p:po}));
-  closeModal();renderPurchase();toast('已建立 '+no+',請加入商品');
+  closeModal();renderPurchase();toast('已建立 '+no);
+  openEditPO(no);
 }
 
 function openEditPO(no){
   const p=state.purchases.find(x=>x.no===no);if(!p)return;
   const rows=p.items.map((i,idx)=>`<div class="porow">
-    <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12px">${i.name}</div>
-      <div class="style-no">${i.no} · ${p.currency} ${i.unitFx.toLocaleString()} ×${i.qty}</div></div>
+    <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:12px">${poItemLabel(i)}</div>
+      <div class="style-no">${i.no} · ${p.currency} ${i.unitFx.toLocaleString()} ×${i.qty}${i.price?' · 售 '+money(i.price):''}</div></div>
     <button class="del" onclick="delPOItem('${no}',${idx})">✕</button>
   </div>`).join('')||`<div class="empty" style="padding:14px 0">還沒有商品</div>`;
+  const t=poTotals(p);
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>${p.no} · ${p.vendor}</h3><div class="sub">${p.stage}</div>
-    <div class="grid2">
-      <div><label class="fld">運費 NT$</label><input class="f" id="ep_freight" type="number" value="${p.freight}" inputmode="numeric"></div>
-      <div><label class="fld">關稅 NT$</label><input class="f" id="ep_duty" type="number" value="${p.duty}" inputmode="numeric"></div>
-    </div>
-    <label class="fld">匯率</label><input class="f" id="ep_rate" type="number" step="0.0001" value="${p.rate}" inputmode="decimal">
+    <h3>${p.no}</h3><div class="sub">${p.stage} · ${t.units} 件 · ${money(t.total)}</div>
+    ${poHeaderFields('ep',p)}
     <button class="btn ghost sm" style="margin-top:10px" onclick="savePOMeta('${no}')">儲存單頭</button>
 
     <h2 class="sec" style="margin-top:18px">商品明細</h2>
     ${rows}
-    <button class="btn ghost sm" style="margin-top:8px" onclick="openAddPOItem('${no}')">＋ 加入商品</button>
-    <button class="btn ghost sm" onclick="openImportPO('${no}')">從 CSV 匯入明細</button>`);
+    <div class="btn-row"><button class="btn sm" onclick="openAddPOItem('${no}')">＋ 加入商品</button>
+      <button class="btn ghost sm" onclick="openImportPO('${no}')">CSV 匯入</button></div>
+    <button class="btn ghost sm" style="margin-top:18px;color:var(--red);border-color:var(--red)" onclick="deletePO('${no}')">刪除這張採購單</button>`);
 }
 function savePOMeta(no){
-  const p=state.purchases.find(x=>x.no===no);
-  p.freight=+val('ep_freight')||0; p.duty=+val('ep_duty')||0; p.rate=+val('ep_rate')||p.rate;
+  const p=state.purchases.find(x=>x.no===no); if(!p)return;
+  readPOHeader('ep',p);
   api('frcs_upsert_purchase',S({p}));
-  closeModal();renderPurchase();toast('已更新');
+  closeModal();renderPurchase();toast('已更新 '+no);
 }
 function delPOItem(no,idx){
   const p=state.purchases.find(x=>x.no===no);
   p.items.splice(idx,1);api('frcs_upsert_purchase',S({p}));openEditPO(no);renderPurchase();
 }
+
+/* 加入商品:選既有款式會自動帶品名分類售價;填顏色尺寸會一次長出每個規格 */
+let poSel={sizes:[]};
 function openAddPOItem(no){
   const p=state.purchases.find(x=>x.no===no);
-  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>加入商品 · ${p.no}</h3><div class="sub">新品或補既有商品皆可</div>
-    <label class="fld">商品編號</label><input class="f" id="ai_no" inputmode="numeric" placeholder="21503">
-    <label class="fld">品名</label><input class="f" id="ai_name" placeholder="顏染造型衫-灰">
+  styleSel={gender:null,cat:null}; poSel={sizes:[]};
+  const groups=styleGroups(true);
+  openModal(`<button class="xclose" onclick="openEditPO('${no}')">←</button>
+    <h3>加入商品 · ${p.no}</h3><div class="sub">補既有款式:打款式編號會自動帶資料。新款:自己填。</div>
+    <label class="fld">款式編號</label>
+    <input class="f" id="ai_no" inputmode="numeric" list="ai_styles" placeholder="${nextStyleNo()||'21501'}" oninput="poStylePicked()">
+    <datalist id="ai_styles">${groups.map(g=>`<option value="${g.styleNo}">${g.name}</option>`).join('')}</datalist>
+    <label class="fld">品名</label><input class="f" id="ai_name" placeholder="顏染造型衫">
+    <label class="fld">性別線</label>${styleChips('gender',state.genders,null)}
+    <label class="fld">品類</label>${styleChips('cat',state.cats,null)}
+    <label class="fld">顏色 <span class="opt">· 逗號分開,沒有就留空</span></label>
+    <input class="f" id="ai_colors" placeholder="黑, 白, 炭灰">
+    <label class="fld">尺寸 <span class="opt">· 沒有就不選</span></label>
+    <div class="chips" id="ai_sizes">${SIZE_PRESET.map(z=>`<div class="chip" onclick="poSizeToggle('${z}')">${z}</div>`).join('')}</div>
+    <input class="f" id="ai_size_extra" style="margin-top:6px" placeholder="自訂尺寸,逗號分開(28, 30)">
     <div class="grid2">
-      <div><label class="fld">性別線</label><select class="f" id="ai_gender">${state.genders.map(g=>`<option>${g}</option>`).join('')}</select></div>
-      <div><label class="fld">品類</label><select class="f" id="ai_cat">${state.cats.map(c=>`<option>${c}</option>`).join('')}</select></div>
+      <div><label class="fld">單價 ${p.currency} <span class="opt">· 原幣</span></label><input class="f" id="ai_fx" type="number" inputmode="decimal"></div>
+      <div><label class="fld">每個規格幾件</label><input class="f" id="ai_qty" type="number" value="1" inputmode="numeric"></div>
     </div>
-    <div class="grid2">
-      <div><label class="fld">單價 ${p.currency}</label><input class="f" id="ai_fx" type="number" inputmode="numeric"></div>
-      <div><label class="fld">數量</label><input class="f" id="ai_qty" type="number" value="1" inputmode="numeric"></div>
-    </div>
-    <label class="fld">售價 NT$(可留空,自動抓 2.8 倍)</label><input class="f" id="ai_price" type="number" inputmode="numeric">
+    <label class="fld">售價 NT$ <span class="opt">· 留空自動抓成本 2.8 倍;既有款式用原售價</span></label><input class="f" id="ai_price" type="number" inputmode="numeric">
+    <div class="margin-line" id="ai_preview">填好上面會算出幾個規格、幾件</div>
     <button class="btn green" style="margin-top:14px" onclick="doAddPOItem('${no}')">加入</button>`);
+  ['ai_colors','ai_size_extra','ai_qty'].forEach(id=>document.getElementById(id).addEventListener('input',poPreview));
 }
 function doAddPOItem(no){
   const p=state.purchases.find(x=>x.no===no);
-  const n=val('ai_no').trim();
-  if(!n){toast('請填商品編號');return;}
-  p.items.push({no:n,name:val('ai_name')||'未命名',cat:val('ai_cat'),gender:val('ai_gender'),
-    unitFx:+val('ai_fx')||0,qty:+val('ai_qty')||1,price:+val('ai_price')||0});
+  const styleNo=val('ai_no').trim();
+  if(!styleNo){toast('請填款式編號');return;}
+  const name=val('ai_name')||'未命名';
+  if(!styleSel.gender||!styleSel.cat){toast('選性別線和品類');return;}
+  const fx=+val('ai_fx')||0, qty=+val('ai_qty')||1, price=+val('ai_price')||0;
+  const used=new Set([...state.styles.map(s=>s.no),...state.purchases.flatMap(x=>x.items.map(i=>i.no))]);
+  const rows=poVariants().map(({c,z})=>({no:poSkuNo(styleNo,c,z,used),styleNo,color:c||null,size:z||null,
+    name,cat:styleSel.cat,gender:styleSel.gender,unitFx:fx,qty,price}));
+  /* 同一張單同一個 SKU 再加 = 累加數量 */
+  rows.forEach(r=>{ const ex=p.items.find(i=>i.no===r.no); if(ex){ex.qty+=r.qty; ex.unitFx=r.unitFx||ex.unitFx;} else p.items.push(r); });
   api('frcs_upsert_purchase',S({p}));
-  openEditPO(no);renderPurchase();toast('已加入');
+  openEditPO(no);renderPurchase();toast(`已加入 ${rows.length} 個規格`);
 }
 function openImportPO(no){
-  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+  openModal(`<button class="xclose" onclick="openEditPO('${no}')">←</button>
     <h3>匯入採購明細</h3>
-    <div class="sub">欄位:商品編號, 品名, 類別, 單價(原幣), 數量</div>
-    <textarea class="f" id="ipo_csv" rows="8" placeholder="21501,顏染造型衫-黑,男上衣,22000,4"></textarea>
+    <div class="sub">欄位:款式編號, 品名, 類別, 單價(原幣), 數量, 顏色, 尺寸</div>
+    <textarea class="f" id="ipo_csv" rows="8" placeholder="21501,顏染造型衫,男上衣,22000,4,黑,M&#10;21501,顏染造型衫,男上衣,22000,2,黑,L"></textarea>
     <button class="btn" style="margin-top:12px" onclick="doImportPO('${no}')">匯入</button>
-    <div class="hint">單價填原幣(如韓元 22000),系統會依匯率換算並攤提運費關稅。</div>`);
+    <div class="hint">顏色、尺寸可以留空。同款不同顏色尺寸各一列,條碼會自動接在款式編號後面。</div>`);
 }
 function doImportPO(no){
   const p=state.purchases.find(x=>x.no===no);
   const raw=document.getElementById('ipo_csv').value.trim();
   if(!raw){toast('請貼上 CSV');return;}
   let added=0,skipped=0;
+  const used=new Set([...state.styles.map(s=>s.no),...state.purchases.flatMap(x=>x.items.map(i=>i.no))]);
   raw.split(/\r?\n/).forEach(line=>{
-    const c=line.split(',').map(x=>x.trim());
+    const c=line.split(/[,\t]/).map(x=>x.trim());
     if(c.length<3||!c[0]||isNaN(+c[0])){skipped++;return;}
     const {gender,cat}=parseCat(c[2]);
-    p.items.push({no:c[0],name:c[1]||'未命名',cat,gender,unitFx:+c[3]||0,qty:+c[4]||1,price:0});
+    const color=c[5]||'', size=(c[6]||'').toUpperCase();
+    const sku=poSkuNo(c[0],color,size,used);
+    const ex=p.items.find(i=>i.no===sku);
+    if(ex){ex.qty+=(+c[4]||1);}
+    else p.items.push({no:sku,styleNo:c[0],color:color||null,size:size||null,name:c[1]||'未命名',cat,gender,unitFx:+c[3]||0,qty:+c[4]||1,price:0});
     added++;
   });
   api('frcs_upsert_purchase',S({p}));
-  closeModal();renderPurchase();
-  toast(`已匯入 ${added} 項${skipped?' · 略過 '+skipped:''}`);
+  openEditPO(no);renderPurchase();
+  toast(`已匯入 ${added} 列${skipped?' · 略過 '+skipped:''}`);
 }
 
 /* ---------------- 調貨 ---------------- */
@@ -2967,6 +2984,174 @@ function monthList(n){
 }
 
 function setRepMonth(ym){ state.repMonth=ym; renderReport(); }
+
+function findVendor(name){ return (state.vendors||[]).find(v=>v.name===name)||null; }
+
+function renderVendors(){
+  const el=document.getElementById('vendorBox'); if(!el)return;
+  const vs=state.vendors||[];
+  el.innerHTML=`<div class="row-between" style="margin-top:4px">
+      <h2 class="sec" style="margin-bottom:6px">廠商 VENDORS</h2>
+      <button class="btn ghost sm" style="width:auto;margin:0" onclick="openVendorModal()">＋ 新廠商</button>
+    </div>
+    ${vs.length?`<div class="filterbar" style="margin-bottom:12px">${vs.map(v=>
+      `<div class="fchip" onclick="openVendorModal('${v.name.replace(/'/g,'')}')">${v.name} · ${v.currency}</div>`).join('')}</div>`
+      :`<div class="hint" style="margin-bottom:12px">還沒有廠商。先建廠商,開採購單時直接選,幣別匯率自動帶入。</div>`}`;
+}
+
+function openVendorModal(name){
+  const v=name?findVendor(name):null;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>${v?'編輯廠商':'新廠商'}</h3><div class="sub">${v?v.name:'批貨的對象:市場、檔口、工廠、代購'}</div>
+    ${v?'':`<label class="fld">廠商名稱</label><input class="f" id="vd_name" placeholder="Seoul / 東大門 A">`}
+    <div class="grid2">
+      <div><label class="fld">聯絡人</label><input class="f" id="vd_contact" value="${v?(v.contact||''):''}" placeholder="老闆娘 / 小金"></div>
+      <div><label class="fld">電話 / LINE</label><input class="f" id="vd_phone" value="${v?(v.phone||''):''}" placeholder="+82 10-… / LINE ID"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">幣別</label><select class="f" id="vd_cur">${['TWD','KRW','USD','JPY','CNY','EUR'].map(c=>`<option ${(v?v.currency:'TWD')===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div><label class="fld">預設匯率 <span class="opt">· 1 外幣 = ? 台幣</span></label><input class="f" id="vd_rate" type="number" step="0.0001" inputmode="decimal" value="${v?v.rate:1}"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">到貨約幾天 <span class="opt">· 開單時算預計到貨</span></label><input class="f" id="vd_lead" type="number" inputmode="numeric" value="${v&&v.leadDays!=null?v.leadDays:''}" placeholder="14"></div>
+      <div><label class="fld">備註</label><input class="f" id="vd_note" value="${v?(v.note||'').replace(/"/g,'&quot;'):''}" placeholder="付款方式、最低訂量…"></div>
+    </div>
+    <button class="btn" style="margin-top:14px" onclick="saveVendor(${v?`'${v.name.replace(/'/g,'')}'`:'null'})">${v?'儲存':'建立廠商'}</button>
+    ${v?`<button class="btn ghost sm" style="color:var(--red);border-color:var(--red)" onclick="deleteVendor('${v.name.replace(/'/g,'')}')">刪除廠商</button>`:''}`);
+}
+
+function saveVendor(existing){
+  const name=existing||val('vd_name');
+  if(!name){toast('請填廠商名稱');return;}
+  const rec={name,contact:val('vd_contact'),phone:val('vd_phone'),currency:val('vd_cur'),rate:+val('vd_rate')||1,
+    leadDays:val('vd_lead')===''?null:(+val('vd_lead')||0),note:val('vd_note'),active:true};
+  state.vendors=state.vendors||[];
+  const ex=findVendor(name);
+  if(ex)Object.assign(ex,rec); else state.vendors.push(rec);
+  state.vendors.sort((a,b)=>a.name.localeCompare(b.name,'zh-Hant'));
+  api('frcs_upsert_vendor',{p:rec});
+  closeModal(); renderPurchase(); toast('已儲存 '+name);
+}
+
+function deleteVendor(name){
+  const used=state.purchases.filter(p=>p.vendor===name&&p.stage!=='已入倉').length;
+  if(!window.confirm(`刪除廠商「${name}」?${used?`\n有 ${used} 張進行中的採購單用它,單子不會消失。`:''}`))return;
+  state.vendors=(state.vendors||[]).filter(v=>v.name!==name);
+  api('frcs_delete_vendor',{p_name:name});
+  closeModal(); renderPurchase(); toast('已刪除 '+name);
+}
+
+/* ================= 採購 PURCHASE ORDERS ================= */
+
+function nextPONo(){
+  const yy=String(new Date().getFullYear()).slice(2);
+  const nums=state.purchases.map(p=>{const m=String(p.no).match(/^PO(\d{2})-(\d+)$/);return m&&m[1]===yy?+m[2]:0;});
+  return `PO${yy}-${String((nums.length?Math.max(...nums):0)+1).padStart(2,'0')}`;
+}
+
+function addDays(d,n){const x=new Date(d+'T00:00:00');x.setDate(x.getDate()+n);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');}
+
+function poItemLabel(i){ const v=[i.color,i.size].filter(Boolean).join(' / '); return i.name+(v?' · '+v:''); }
+
+function poVendorChanged(prefix){
+  const v=findVendor(val(prefix+'_vendor')); if(!v)return;
+  const cur=document.getElementById(prefix+'_cur'), rate=document.getElementById(prefix+'_rate'), eta=document.getElementById(prefix+'_eta'), ord=document.getElementById(prefix+'_ordered');
+  if(cur)cur.value=v.currency; if(rate)rate.value=v.rate;
+  if(eta&&v.leadDays!=null&&ord&&ord.value) eta.value=addDays(ord.value,v.leadDays);
+}
+
+function vendorSelectHtml(id,cur){
+  const vs=state.vendors||[];
+  return `<select class="f" id="${id}" onchange="if(this.value==='__new'){openVendorModal();}else poVendorChanged('${id.split('_')[0]}')">
+    ${vs.length?'':'<option value="">（還沒有廠商）</option>'}
+    ${vs.map(v=>`<option ${v.name===cur?'selected':''}>${v.name}</option>`).join('')}
+    <option value="__new">＋ 新廠商…</option></select>`;
+}
+
+function poHeaderFields(prefix,p){
+  const cur=['TWD','KRW','USD','JPY','CNY','EUR'];
+  return `<label class="fld">廠商</label>${vendorSelectHtml(prefix+'_vendor',p?p.vendor:'')}
+    <div class="grid2">
+      <div><label class="fld">幣別</label><select class="f" id="${prefix}_cur">${cur.map(c=>`<option ${(p?p.currency:(state.vendors&&state.vendors[0]?state.vendors[0].currency:'TWD'))===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div><label class="fld">匯率 <span class="opt">· 1 外幣 = ? 台幣</span></label><input class="f" id="${prefix}_rate" type="number" step="0.0001" inputmode="decimal" value="${p?p.rate:(state.vendors&&state.vendors[0]?state.vendors[0].rate:1)}"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">運費 NT$</label><input class="f" id="${prefix}_freight" type="number" inputmode="numeric" value="${p?p.freight:''}" placeholder="0"></div>
+      <div><label class="fld">關稅 NT$</label><input class="f" id="${prefix}_duty" type="number" inputmode="numeric" value="${p?p.duty:''}" placeholder="0"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">下單日</label><input class="f" id="${prefix}_ordered" type="date" value="${p?(p.ordered||''):today()}" onchange="poVendorChanged('${prefix}')"></div>
+      <div><label class="fld">預計到貨</label><input class="f" id="${prefix}_eta" type="date" value="${p&&p.eta&&p.eta!=='—'?p.eta:''}"></div>
+    </div>
+    <div class="grid2">
+      <div><label class="fld">物流單號 <span class="opt">· 選填</span></label><input class="f" id="${prefix}_tracking" value="${p?(p.tracking||''):''}" placeholder="到貨追蹤用"></div>
+      <div><label class="fld">備註 <span class="opt">· 選填</span></label><input class="f" id="${prefix}_note" value="${p?(p.note||'').replace(/"/g,'&quot;'):''}" placeholder="付款條件、季別…"></div>
+    </div>`;
+}
+
+function readPOHeader(prefix,p){
+  const vendor=val(prefix+'_vendor');
+  return Object.assign(p||{},{vendor:vendor&&vendor!=='__new'?vendor:(p?p.vendor:'—'),currency:val(prefix+'_cur'),
+    rate:+val(prefix+'_rate')||1,freight:+val(prefix+'_freight')||0,duty:+val(prefix+'_duty')||0,
+    ordered:val(prefix+'_ordered')||today(),eta:val(prefix+'_eta')||'—',tracking:val(prefix+'_tracking'),note:val(prefix+'_note')});
+}
+
+async function deletePO(no){
+  const p=state.purchases.find(x=>x.no===no); if(!p)return;
+  if(p.stage==='已入倉'){toast('已入倉的不能刪');return;}
+  if(!window.confirm(`刪除採購單 ${no}(${p.vendor} · ${p.items.length} 項)?\n刪了就沒了。`))return;
+  const r=await api('frcs_delete_purchase',{p_no:no});
+  if(r.ok===false && !r.queued) return;
+  state.purchases=state.purchases.filter(x=>x.no!==no);
+  state.topay=(state.topay||[]).filter(t=>t.no!=='TP-'+no);
+  closeModal();renderPurchase();toast('已刪除 '+no);
+}
+
+function poStylePicked(){
+  const g=findGroup(val('ai_no')); if(!g)return;
+  document.getElementById('ai_name').value=g.name;
+  styleChip('gender',g.gender); styleChip('cat',g.cat);
+  document.getElementById('ai_price').value=g.price||'';
+  const colors=[...new Set(g.skus.map(s=>s.color).filter(Boolean))];
+  const sizes=[...new Set(g.skus.map(s=>s.size).filter(Boolean))];
+  if(colors.length) document.getElementById('ai_colors').value=colors.join(', ');
+  poSel.sizes=sortSizes(sizes.filter(z=>SIZE_PRESET.includes(z)));
+  document.getElementById('ai_size_extra').value=sizes.filter(z=>!SIZE_PRESET.includes(z)).join(', ');
+  document.querySelectorAll('#ai_sizes .chip').forEach(c=>c.classList.toggle('on',poSel.sizes.includes(c.textContent.trim())));
+  poPreview();
+}
+
+function poSizeToggle(z){
+  poSel.sizes=poSel.sizes.includes(z)?poSel.sizes.filter(x=>x!==z):sortSizes([...poSel.sizes,z]);
+  document.querySelectorAll('#ai_sizes .chip').forEach(c=>c.classList.toggle('on',poSel.sizes.includes(c.textContent.trim())));
+  poPreview();
+}
+
+function poVariants(){
+  const colors=val('ai_colors').split(/[,，、]/).map(x=>x.trim()).filter(Boolean);
+  const extra=val('ai_size_extra').split(/[,，、]/).map(x=>x.trim().toUpperCase()).filter(Boolean);
+  const sizes=sortSizes([...new Set([...poSel.sizes,...extra])]);
+  const cs=colors.length?colors:[''], zs=sizes.length?sizes:[''];
+  const out=[]; cs.forEach(c=>zs.forEach(z=>out.push({c,z}))); return out;
+}
+
+function poPreview(){
+  const el=document.getElementById('ai_preview'); if(!el)return;
+  const v=poVariants(), q=+val('ai_qty')||0;
+  el.textContent=(v.length===1&&!v[0].c&&!v[0].z)?`單一規格 · ${q} 件`:`${v.length} 個規格 × ${q} 件 = ${v.length*q} 件`;
+}
+/* 這個款式＋顏色尺寸的條碼:商品主檔有就沿用,沒有就接流水號(避開主檔和這張單已用的) */
+
+function poSkuNo(styleNo,c,z,used){
+  const g=findGroup(styleNo);
+  if(!c&&!z){ const single=g&&g.skus.find(s=>!s.color&&!s.size); const no=single?single.no:styleNo; used.add(no); return no; }
+  const ex=g&&g.skus.find(s=>(s.color||'')===c&&(s.size||'')===z);
+  if(ex){ used.add(ex.no); return ex.no; }
+  for(let i=1;i<100;i++){ const no=styleNo+String(i).padStart(2,'0'); if(!used.has(no)){ used.add(no); return no; } }
+  return styleNo+'99';
+}
+
+/* ================= 廠商 VENDORS ================= */
 
 /* ---------------- util ---------------- */
 function pick(el,group){el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');state.picks[group]=el.textContent.trim();}

@@ -14,6 +14,7 @@
 | 2 | `02_rpc.sql` | 所有 RPC（載入、結帳、入庫、盤點、預購、採購、開銷…） |
 | 3 | `03_security.sql` | RLS deny-all，只開放 RPC 給登入者 |
 | 4 | `04_storage.sql` | 商品圖片 bucket `frcs-photos` 與上傳權限 |
+| 5 | `05_purchase_detail.sql` | 廠商主檔、採購單備註、物流單號、可刪除（已部署 2026-10-30；全新安裝 01～04 已含） |
 
 順序不能顛倒（03 要先有 01、02 的物件才收得掉權限；04 要用到 01 的 `frcs_is_staff`）。
 

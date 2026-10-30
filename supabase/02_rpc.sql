@@ -132,9 +132,16 @@ begin
                   (select coalesce(jsonb_agg(jsonb_build_object(
                      'no', p.no, 'vendor', p.vendor, 'currency', p.currency, 'rate', p.rate,
                      'freight', p.freight, 'duty', p.duty, 'stage', p.stage, 'ordered', p.ordered_on, 'eta', p.eta,
-                     'items', p.items, 'receivedAt', p.received_on
+                     'items', p.items, 'note', p.note, 'tracking', p.tracking, 'receivedAt', p.received_on
                    ) order by p.created_at desc), '[]'::jsonb)
                    from frcs_purchases p where p.store = v_store)
+                 else '[]'::jsonb end,
+    'vendors',  case when v_owner then
+                  (select coalesce(jsonb_agg(jsonb_build_object(
+                     'name', v.name, 'contact', v.contact, 'phone', v.phone, 'currency', v.currency,
+                     'rate', v.rate, 'leadDays', v.lead_days, 'note', v.note, 'active', v.active
+                   ) order by v.name), '[]'::jsonb)
+                   from frcs_vendors v where v.active)
                  else '[]'::jsonb end,
     'expenses', case when v_owner then
                   (select coalesce(jsonb_agg(jsonb_build_object(
@@ -604,16 +611,65 @@ begin
   if exists (select 1 from frcs_purchases where no = v_no and stage = '已入倉') then
     raise exception '已入倉的採購單不能再改' using errcode = '22023';
   end if;
-  insert into frcs_purchases (no, store, vendor, currency, rate, freight, duty, stage, ordered_on, eta, items)
+  insert into frcs_purchases (no, store, vendor, currency, rate, freight, duty, stage, ordered_on, eta, items, note, tracking)
   values (v_no, v_store, nullif(p->>'vendor', ''), coalesce(nullif(p->>'currency', ''), 'TWD'),
           coalesce((p->>'rate')::numeric, 1), coalesce((p->>'freight')::numeric, 0), coalesce((p->>'duty')::numeric, 0),
           coalesce(nullif(p->>'stage', ''), '已訂購'), nullif(p->>'ordered', ''), nullif(p->>'eta', ''),
-          coalesce(p->'items', '[]'::jsonb))
+          coalesce(p->'items', '[]'::jsonb), nullif(p->>'note', ''), nullif(p->>'tracking', ''))
   on conflict (no) do update set
     vendor = excluded.vendor, currency = excluded.currency, rate = excluded.rate,
     freight = excluded.freight, duty = excluded.duty, stage = excluded.stage,
-    ordered_on = excluded.ordered_on, eta = excluded.eta, items = excluded.items, updated_at = now();
+    ordered_on = excluded.ordered_on, eta = excluded.eta, items = excluded.items,
+    note = excluded.note, tracking = excluded.tracking, updated_at = now();
   return jsonb_build_object('ok', true, 'no', v_no);
+end $$;
+
+-- 刪採購單（老闆）；已入倉的不能刪，庫存和成本已經寫進去了
+create or replace function frcs_delete_purchase(p_no text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_stage text;
+begin
+  perform frcs_require_owner();
+  select stage into v_stage from frcs_purchases where no = p_no;
+  if v_stage is null then
+    return jsonb_build_object('ok', true, 'dup', true);
+  end if;
+  if v_stage = '已入倉' then
+    raise exception '已入倉的採購單不能刪，請用盤點或退貨調整' using errcode = '22023';
+  end if;
+  delete from frcs_topay where no = 'TP-' || p_no and not paid;
+  delete from frcs_purchases where no = p_no;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- 廠商主檔（老闆）
+create or replace function frcs_upsert_vendor(p jsonb)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_name text := trim(p->>'name');
+begin
+  perform frcs_require_owner();
+  if v_name is null or v_name = '' then
+    raise exception '廠商名稱不能空白' using errcode = '22023';
+  end if;
+  insert into frcs_vendors (name, contact, phone, currency, rate, lead_days, note, active)
+  values (v_name, nullif(p->>'contact', ''), nullif(p->>'phone', ''), coalesce(nullif(p->>'currency', ''), 'TWD'),
+          coalesce((p->>'rate')::numeric, 1), (p->>'leadDays')::int, nullif(p->>'note', ''), true)
+  on conflict (name) do update set
+    contact = excluded.contact, phone = excluded.phone, currency = excluded.currency, rate = excluded.rate,
+    lead_days = excluded.lead_days, note = excluded.note, active = true;
+  return jsonb_build_object('ok', true, 'name', v_name);
+end $$;
+
+-- 刪廠商 = 停用（採購單上的廠商名還在）
+create or replace function frcs_delete_vendor(p_name text)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  perform frcs_require_owner();
+  update frcs_vendors set active = false where name = p_name;
+  return jsonb_build_object('ok', true);
 end $$;
 
 -- 入倉：換匯＋運費關稅按件攤提算單件成本，建檔／更新成本、加庫存
