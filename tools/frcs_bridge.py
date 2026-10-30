@@ -85,7 +85,7 @@ def printer_up():
             return True
         if SERIAL:
             return os.path.exists(SERIAL)
-    except OSError:
+    except Exception:          # 連 IP 填錯成亂字（UnicodeError）都要吞掉，/ping 不能掛
         pass
     return False
 
@@ -96,7 +96,7 @@ def label_up():
     try:
         socket.create_connection((LABEL, LABEL_PORT), timeout=1.5).close()
         return True
-    except OSError:
+    except Exception:
         return False
 
 
@@ -211,7 +211,7 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split('?')[0]
         if path == '/ping':
-            self.reply(200, {'ok': True, 'printer': printer_up(), 'label': label_up()})
+            self.reply(200, {'ok': True, 'printer': printer_up(), 'label': label_up(), 'printerAddr': PRINTER or SERIAL or '', 'labelAddr': LABEL})
         elif path == '/open':
             try:
                 send_printer(INIT + KICK)

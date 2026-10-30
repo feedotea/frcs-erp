@@ -39,12 +39,16 @@ EOF
 )
   if [ -z "$IP" ]; then
     echo "   沒有自動選到。請看上面列表，或在出單機上印自檢頁（關機、按住 FEED 開機）看 IP。"
-    read -r -p "   出單機 IP：" IP </dev/tty
+    read -r -p "   出單機 IP（像 192.168.1.111）：" IP </dev/tty
   else
     echo "   用 $IP"
   fi
 fi
 
+if ! [[ "$IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "   「$IP」不是 IP，停止。請重跑並只貼 IP，例如 192.168.1.111"
+  exit 1
+fi
 echo "③ 設定開機自動跑…"
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
