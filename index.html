@@ -217,6 +217,11 @@
   .scanbox .scanic{font-size:16px;color:var(--prussian);}
   .scanbox .scanin{border:none;flex:1;background:transparent;padding:9px 4px;}
   .scanbox .scanin:focus{outline:none;}
+  .suggest{border:1px solid var(--prussian);border-top:none;background:var(--paper);margin:-6px 0 8px;}
+  .suggest .sg{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px dotted var(--line);cursor:pointer;}
+  .suggest .sg:last-child{border-bottom:none;}
+  .suggest .sg .sn{flex:1;min-width:0;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .suggest .sg .sm{font-family:"Courier New",monospace;font-size:11px;color:var(--muted);white-space:nowrap;}
 
   /* label sheet */
   .lblgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;}
@@ -348,9 +353,10 @@
     <div class="view on" id="v-register">
       <div class="scanbox">
         <span class="scanic">▤</span>
-        <input class="f scanin" id="regScan" placeholder="掃描商品條碼加入購物車" onkeydown="if(event.key==='Enter')scanToCart()" autocomplete="off">
+        <input class="f scanin" id="regScan" placeholder="掃條碼,或打品名／編號搜尋" onkeydown="if(event.key==='Enter')scanToCart()" oninput="renderScanSuggest()" autocomplete="off">
         <button class="btn ghost sm cambtn" style="width:auto;margin:0;padding:7px 9px;display:none" onclick="openCamScan('cart')">📷</button>
       </div>
+      <div id="scanSuggest"></div>
       <div class="row-between" style="margin-top:4px">
         <button class="btn ghost sm" style="width:auto;margin:0" onclick="openPickItem()">＋ 手動選品</button>
         <button class="btn ghost sm" style="width:auto;margin:0" onclick="openMemberAttach()">♦ 帶入會員</button>
@@ -1286,11 +1292,36 @@ function addToCart(no,qty){
   else state.cart.push({no:s.no,name:skuLabel(s),price:s.price,listPrice:s.price,cost:s.cost,qty});
   renderRegister();return true;
 }
+/* 掃描框:打字就列候選(品名、款式編號、條碼都比),點一下加入 */
+function scanMatches(q){
+  q=q.trim(); if(!q) return [];
+  const ql=q.toLowerCase();
+  return styleGroups(false).filter(g=>g.styleNo.includes(q)||g.name.toLowerCase().includes(ql)||g.skus.some(x=>x.no.includes(q))).slice(0,8);
+}
+function renderScanSuggest(){
+  const box=document.getElementById('scanSuggest'); if(!box)return;
+  const q=document.getElementById('regScan').value;
+  const list=scanMatches(q);
+  if(!q.trim()||!list.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="suggest">${list.map(g=>`<div class="sg" onclick="scanPick('${g.styleNo}')">
+    ${thumbHtml(g,'sm')}<div class="sn">${g.name}<div class="sm">${g.styleNo}${hasVariants(g)?' · '+g.skus.filter(x=>x.active!==false).length+' 規格':''}</div></div>
+    <div class="sm">${money(g.price)} · 剩 ${g.qty}</div></div>`).join('')}</div>`;
+}
+function scanPick(styleNo){
+  const inp=document.getElementById('regScan'); inp.value=''; document.getElementById('scanSuggest').innerHTML='';
+  const g=findGroup(styleNo); if(!g)return;
+  if(!hasVariants(g)){ const s=g.skus.find(x=>x.active!==false); if(addToCart(s.no,1)) toast('加入 '+skuLabel(s)); }
+  else openVariantList(styleNo,'cart');
+  inp.focus();
+}
 function scanToCart(){
-  const inp=document.getElementById('regScan');const code=inp.value.trim();inp.value='';
+  const inp=document.getElementById('regScan');const code=inp.value.trim();
   const s=findStyle(code);
-  if(!s){toast('查無此商品編號:'+code);inp.focus();return;}
-  if(addToCart(s.no,1))toast('加入 '+skuLabel(s));
+  if(s){ inp.value=''; document.getElementById('scanSuggest').innerHTML=''; if(addToCart(s.no,1))toast('加入 '+skuLabel(s)); inp.focus(); return; }
+  /* 不是條碼:候選只有一個就直接用,多個就留著讓人點 */
+  const list=scanMatches(code);
+  if(list.length===1){ scanPick(list[0].styleNo); return; }
+  if(!list.length){ toast('查無此商品:'+code); inp.value=''; document.getElementById('scanSuggest').innerHTML=''; }
   inp.focus();
 }
 function cartQtyStep(no,d){
