@@ -14,8 +14,9 @@ FRCS 收銀橋 —— 讓 FRCS INVENTORY 網頁可以印收據、開錢箱、印
   FRCS_PRINTER=192.168.1.60            網路孔，走 TCP 9100（建議；不用驅動）
   FRCS_SERIAL=/dev/tty.usbserial-XXXX  序列埠（USB 轉 RS-232），鮑率 FRCS_BAUD 預設 19200
 
-貼紙機（TSPL 指令，Xprinter / Gprinter 那類）：
-  FRCS_LABEL=192.168.1.61              網路；沒設就不開 /label
+貼紙機（TSPL 指令，Xprinter / Gprinter 那類），二選一：
+  FRCS_LABEL=192.168.1.61              網路版，走 TCP 9100
+  FRCS_LABEL_QUEUE=dimlabel            USB 版，插 Mac，透過 CUPS 列印佇列 raw 送（install_label_mac.sh 會建）
   FRCS_LABEL_SIZE=40x30                貼紙寬x高 mm
 
 執行：
@@ -29,7 +30,9 @@ import http.server
 import json
 import os
 import socket
+import subprocess
 import sys
+import tempfile
 import time
 
 PORT = int(os.environ.get('FRCS_BRIDGE_PORT', '9999'))
@@ -37,7 +40,8 @@ PRINTER = os.environ.get('FRCS_PRINTER', '')           # 出單機 IP
 PRINTER_PORT = int(os.environ.get('FRCS_PRINTER_PORT', '9100'))
 SERIAL = os.environ.get('FRCS_SERIAL', '')             # 或序列埠
 BAUD = int(os.environ.get('FRCS_BAUD', '19200'))       # TP805 實測 19200，9600 是錯的
-LABEL = os.environ.get('FRCS_LABEL', '')               # 貼紙機 IP
+LABEL = os.environ.get('FRCS_LABEL', '')               # 貼紙機 IP（網路版）
+LABEL_QUEUE = os.environ.get('FRCS_LABEL_QUEUE', '')   # 或 CUPS 佇列名（USB 版）
 LABEL_PORT = int(os.environ.get('FRCS_LABEL_PORT', '9100'))
 LABEL_SIZE = os.environ.get('FRCS_LABEL_SIZE', '40x30')
 ENC = 'cp950'                                           # TP805 自檢頁 Traditional Character Mode: YES → Big5
@@ -91,6 +95,12 @@ def printer_up():
 
 
 def label_up():
+    if LABEL_QUEUE:
+        try:
+            r = subprocess.run(['lpstat', '-p', LABEL_QUEUE], capture_output=True, text=True, timeout=5)
+            return r.returncode == 0 and 'disabled' not in r.stdout
+        except Exception:
+            return False
     if not LABEL:
         return False
     try:
@@ -180,6 +190,21 @@ def label_bytes(items):
 
 
 def send_label(data):
+    if LABEL_QUEUE:
+        # USB：丟給 CUPS 佇列，-o raw 不經任何轉換，TSPL 原樣進印表機
+        with tempfile.NamedTemporaryFile('wb', suffix='.tspl', delete=False) as f:
+            f.write(data)
+            path = f.name
+        try:
+            r = subprocess.run(['lp', '-d', LABEL_QUEUE, '-o', 'raw', path], capture_output=True, text=True, timeout=20)
+            if r.returncode != 0:
+                raise RuntimeError('lp 失敗：' + (r.stderr or r.stdout).strip())
+        finally:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        return
     with socket.create_connection((LABEL, LABEL_PORT), timeout=10) as s:
         s.sendall(data)
 
@@ -211,7 +236,7 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split('?')[0]
         if path == '/ping':
-            self.reply(200, {'ok': True, 'printer': printer_up(), 'label': label_up(), 'printerAddr': PRINTER or SERIAL or '', 'labelAddr': LABEL})
+            self.reply(200, {'ok': True, 'printer': printer_up(), 'label': label_up(), 'printerAddr': PRINTER or SERIAL or '', 'labelAddr': LABEL or LABEL_QUEUE})
         elif path == '/open':
             try:
                 send_printer(INIT + KICK)
@@ -234,8 +259,8 @@ class H(http.server.BaseHTTPRequestHandler):
                 send_printer(receipt_bytes(payload))
                 self.reply(200, {'ok': True})
             elif path == '/label':
-                if not LABEL:
-                    self.reply(200, {'ok': False, 'message': '沒設貼紙機（FRCS_LABEL）'})
+                if not LABEL and not LABEL_QUEUE:
+                    self.reply(200, {'ok': False, 'message': '沒設貼紙機（FRCS_LABEL 或 FRCS_LABEL_QUEUE）'})
                     return
                 items = payload.get('items', [])
                 if not items:
@@ -254,5 +279,5 @@ class H(http.server.BaseHTTPRequestHandler):
 
 if __name__ == '__main__':
     how = f'{PRINTER}:{PRINTER_PORT}' if PRINTER else (f'{SERIAL} @ {BAUD}' if SERIAL else '未設定')
-    print(f'FRCS bridge on http://127.0.0.1:{PORT}  ->  出單機 {how}  貼紙機 {LABEL or "未設定"} ({LABEL_SIZE})')
+    print(f'FRCS bridge on http://127.0.0.1:{PORT}  ->  出單機 {how}  貼紙機 {LABEL or LABEL_QUEUE or "未設定"} ({LABEL_SIZE})')
     http.server.ThreadingHTTPServer(('127.0.0.1', PORT), H).serve_forever()
