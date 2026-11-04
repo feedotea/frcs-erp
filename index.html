@@ -2009,6 +2009,7 @@ async function saveStyle(){
   const priceEl=document.getElementById('st_price');
   const price=+(priceEl.value||0); if(!priceEl.disabled && !price){toast('請填售價');return;}
   const cells=sfCells();
+  if(cells.some(x=>!/^[0-9A-Za-z-]+$/.test(x.no))){toast('條碼編號有問題,請重新填款式編號');return;}
   const dup=cells.find(x=>state.styles.some(s=>s.no===x.no&&(s.styleNo||s.no)!==styleNo));
   if(dup){toast('條碼 '+dup.no+' 已被別的商品用掉');return;}
   const btn=document.getElementById('st_save'); btn.disabled=true; btn.textContent='儲存中…';
@@ -2790,8 +2791,11 @@ function sfRemoveColor(c){ sf.colors=sf.colors.filter(x=>x!==c); sfRenderSpec();
 
 function sfSkuNo(c,z){
   const key=c+'|'+z;
+  const sn=sf.isNew?val('st_no'):sf.styleNo;
+  /* 新建時款式編號還在打,之前配的號不是這個開頭就作廢重配（不然會留下 '?'） */
+  if(sf.isNew && sf.assign[key] && !sf.assign[key].startsWith(sn||'\u0000')) delete sf.assign[key];
   if(sf.assign[key]) return sf.assign[key];
-  const sn=sf.isNew?(val('st_no')||'?'):sf.styleNo;
+  if(!sn) return '（先填款式編號）';
   const ex=sf.g&&sf.g.skus.find(s=>(s.color||'')===c&&(s.size||'')===z);
   if(ex){ sf.assign[key]=ex.no; return ex.no; }
   if(!c&&!z){
