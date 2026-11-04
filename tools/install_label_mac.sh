@@ -42,6 +42,9 @@ env = d.setdefault('EnvironmentVariables', {})
 env['FRCS_LABEL_QUEUE'] = q
 env['FRCS_LABEL'] = ''
 env['FRCS_LABEL_SIZE'] = size
+import os
+for k in ('FRCS_LABEL_TEAR', 'FRCS_LABEL_DIR', 'FRCS_LABEL_SHIFT', 'FRCS_LABEL_TOP'):
+    if os.environ.get(k): env[k] = os.environ[k]
 plistlib.dump(d, open(p, 'wb'))
 print('   plist 已更新：FRCS_LABEL_QUEUE=%s FRCS_LABEL_SIZE=%s' % (q, size))
 EOF
@@ -58,10 +61,15 @@ case "$PING" in
     echo "⑤ 校正貼紙間隙（會走幾張空白紙，正常）…"
     curl -s -m 20 http://127.0.0.1:9999/calibrate; echo
     sleep 4
-    echo "⑥ 印一張測試貼紙…"
-    curl -s -m 20 -X POST http://127.0.0.1:9999/label -H 'Content-Type: application/json' \
-      -d '{"items":[{"name":"測試商品","variant":"黑 / M","no":"2149701","price":1480,"qty":1}]}'
-    echo
+    if [ "${LABEL_DIAG:-}" = "1" ]; then
+      echo "⑥ 印診斷頁（A/B/C 三張，看哪張外框貼齊貼紙邊）…"
+      curl -s -m 30 http://127.0.0.1:9999/labeltest; echo
+    else
+      echo "⑥ 印一張測試貼紙…"
+      curl -s -m 20 -X POST http://127.0.0.1:9999/label -H 'Content-Type: application/json' \
+        -d '{"items":[{"name":"測試商品","variant":"黑 / M","no":"2149701","price":1480,"qty":1}]}'
+      echo
+    fi
     echo "完成。網頁重新整理，商品庫存 → 標籤 會顯示「已接貼紙機」。"
     ;;
   *)

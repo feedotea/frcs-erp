@@ -20,7 +20,8 @@ FRCS 收銀橋 —— 讓 FRCS INVENTORY 網頁可以印收據、開錢箱、印
   FRCS_LABEL_QUEUE=dimlabel            USB 版，插 Mac，透過 CUPS 列印佇列 raw 送（install_label_mac.sh 會建）
   FRCS_LABEL_SIZE=40x30                貼紙寬x高 mm
   FRCS_LABEL_ENC=gb18030               貼紙機中文編碼（XP-420B 是 GBK；出單機 TP805 是 Big5，兩台不一樣）
-  FRCS_LABEL_TOP=52                    上邊留白點數，第一行被切就加大
+  FRCS_LABEL_TOP=12                    上邊留白點數
+  FRCS_LABEL_TEAR=ON  FRCS_LABEL_DIR=1  FRCS_LABEL_SHIFT=0   印出來偏掉時調（GET /labeltest 印診斷頁）
 
 執行：
   python3 tools/frcs_bridge.py
@@ -48,7 +49,10 @@ LABEL_QUEUE = os.environ.get('FRCS_LABEL_QUEUE', '')   # 或 CUPS 佇列名（US
 LABEL_PORT = int(os.environ.get('FRCS_LABEL_PORT', '9100'))
 LABEL_SIZE = os.environ.get('FRCS_LABEL_SIZE', '40x30')
 LABEL_ENC = os.environ.get('FRCS_LABEL_ENC', 'gb18030')  # XP-420B 內建中文字庫是 GBK：Big5 送過去「黑」會變「堵」
-LABEL_TOP = int(os.environ.get('FRCS_LABEL_TOP', '52'))  # 上邊留白（點）。XP-420B 實測 24 還會切到第一行，52 剛好
+LABEL_TOP = int(os.environ.get('FRCS_LABEL_TOP', '12'))  # 上邊留白（點）
+LABEL_TEAR = os.environ.get('FRCS_LABEL_TEAR', 'ON').upper()   # 撕紙模式 ON/OFF：印完要不要把貼紙送到撕紙口
+LABEL_DIR = os.environ.get('FRCS_LABEL_DIR', '1')              # 列印方向 0/1
+LABEL_SHIFT = int(os.environ.get('FRCS_LABEL_SHIFT', '0'))     # 整張圖垂直位移（點），印出來偏就調這個
 ENC = 'cp950'                                           # TP805 自檢頁 Traditional Character Mode: YES → Big5
 COLS = 48                                               # 80mm 紙、Font A 每行字數
 
@@ -190,7 +194,7 @@ def label_bytes(items):
         no = str(it.get('no', ''))
         price = money(it.get('price', 0))
         y = LABEL_TOP
-        cmd = f'SIZE {w} mm,{h} mm\nGAP 2 mm,0\nSET TEAR ON\nDIRECTION 1\nREFERENCE 0,0\nCLS\n'
+        cmd = label_head(w, h)
         cmd += f'TEXT 16,{y},"TSS24.BF2",0,1,1,"{name}"\n'
         y += 26
         if variant:
@@ -202,6 +206,27 @@ def label_bytes(items):
         cmd += f'TEXT 16,{price_y},"TSS24.BF2",0,1,1,"{price}"\n'
         cmd += f'PRINT 1,{qty}\n'
         out += cmd.encode(LABEL_ENC, errors='replace')
+    return out
+
+
+def label_head(w, h):
+    return (f'SIZE {w} mm,{h} mm\nGAP 2 mm,0\nSET TEAR {LABEL_TEAR}\nDIRECTION {LABEL_DIR}\n'
+            f'REFERENCE 0,0\nSHIFT {LABEL_SHIFT}\nCLS\n')
+
+
+def labeltest_bytes():
+    """診斷頁：三張不同設定，每張印外框＋代號，看哪張外框貼齊貼紙邊。"""
+    w, h = (int(x) for x in LABEL_SIZE.lower().split('x'))
+    W, H = w * 8, h * 8
+    out = b''
+    for code, tear, d in (('A', 'ON', '1'), ('B', 'OFF', '1'), ('C', 'ON', '0')):
+        cmd = (f'SIZE {w} mm,{h} mm\nGAP 2 mm,0\nSET TEAR {tear}\nDIRECTION {d}\nREFERENCE 0,0\nSHIFT 0\nCLS\n'
+               f'BOX 2,2,{W-3},{H-3},3\n'
+               f'TEXT 16,16,"3",0,2,2,"{code}"\n'
+               f'TEXT 80,24,"2",0,1,1,"TEAR {tear} DIR {d}"\n'
+               f'TEXT 16,{H-40},"2",0,1,1,"bottom {code}"\n'
+               f'PRINT 1,1\n')
+        out += cmd.encode('ascii')
     return out
 
 
@@ -259,6 +284,12 @@ class H(http.server.BaseHTTPRequestHandler):
         path = self.path.split('?')[0]
         if path == '/ping':
             self.reply(200, {'ok': True, 'printer': printer_up(), 'label': label_up(), 'printerAddr': PRINTER or SERIAL or '', 'labelAddr': LABEL or LABEL_QUEUE})
+        elif path == '/labeltest':
+            try:
+                send_label(labeltest_bytes())
+                self.reply(200, {'ok': True})
+            except Exception as e:
+                self.reply(200, {'ok': False, 'message': str(e)})
         elif path == '/calibrate':
             try:
                 if not (LABEL or LABEL_QUEUE):
