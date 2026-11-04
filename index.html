@@ -1733,7 +1733,7 @@ function advancePreTrack(no){
 /* ---------------- labels ---------------- */
 function lblState(){
   state.lblSel=state.lblSel||{};
-  state.styles.filter(x=>x.active!==false).forEach(x=>{ if(!state.lblSel[x.no]) state.lblSel[x.no]={on:x.qty>0,qty:Math.max(1,x.qty)}; });
+  state.styles.filter(x=>x.active!==false).forEach(x=>{ if(!state.lblSel[x.no]) state.lblSel[x.no]={on:false,qty:Math.max(1,x.qty)}; });
   return state.lblSel;
 }
 function lblSet(no,k,v){ const m=lblState(); if(!m[no])m[no]={on:false,qty:1}; m[no][k]=k==='qty'?Math.max(1,+v||1):v; lblCount(); }
