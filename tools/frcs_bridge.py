@@ -20,7 +20,7 @@ FRCS 收銀橋 —— 讓 FRCS INVENTORY 網頁可以印收據、開錢箱、印
   FRCS_LABEL_QUEUE=dimlabel            USB 版，插 Mac，透過 CUPS 列印佇列 raw 送（install_label_mac.sh 會建）
   FRCS_LABEL_SIZE=40x30                貼紙寬x高 mm
   FRCS_LABEL_ENC=gb18030               貼紙機中文編碼（XP-420B 是 GBK；出單機 TP805 是 Big5，兩台不一樣）
-  FRCS_LABEL_TOP=24                    上邊留白點數，第一行被切就加大
+  FRCS_LABEL_TOP=52                    上邊留白點數，第一行被切就加大
 
 執行：
   python3 tools/frcs_bridge.py
@@ -48,7 +48,7 @@ LABEL_QUEUE = os.environ.get('FRCS_LABEL_QUEUE', '')   # 或 CUPS 佇列名（US
 LABEL_PORT = int(os.environ.get('FRCS_LABEL_PORT', '9100'))
 LABEL_SIZE = os.environ.get('FRCS_LABEL_SIZE', '40x30')
 LABEL_ENC = os.environ.get('FRCS_LABEL_ENC', 'gb18030')  # XP-420B 內建中文字庫是 GBK：Big5 送過去「黑」會變「堵」
-LABEL_TOP = int(os.environ.get('FRCS_LABEL_TOP', '24'))  # 上邊留白（點），實機第一行會被切掉所以往下推
+LABEL_TOP = int(os.environ.get('FRCS_LABEL_TOP', '52'))  # 上邊留白（點）。XP-420B 實測 24 還會切到第一行，52 剛好
 ENC = 'cp950'                                           # TP805 自檢頁 Traditional Character Mode: YES → Big5
 COLS = 48                                               # 80mm 紙、Font A 每行字數
 
@@ -192,12 +192,12 @@ def label_bytes(items):
         y = LABEL_TOP
         cmd = f'SIZE {w} mm,{h} mm\nGAP 2 mm,0\nSET TEAR ON\nDIRECTION 1\nREFERENCE 0,0\nCLS\n'
         cmd += f'TEXT 16,{y},"TSS24.BF2",0,1,1,"{name}"\n'
-        y += 28
+        y += 26
         if variant:
             cmd += f'TEXT 16,{y},"TSS24.BF2",0,1,1,"{variant}"\n'
-            y += 28
-        price_y = H - 34 - 8                          # 價格貼底，留 1mm
-        bar_h = max(36, price_y - y - 30)             # 條碼高度：剩下的空間扣掉底下數字那行
+            y += 26
+        price_y = H - 30                              # 價格貼底
+        bar_h = max(40, price_y - y - 30)             # 條碼高度：剩下的空間扣掉底下數字那行
         cmd += f'BARCODE 16,{y},"128",{bar_h},1,0,2,2,"{no}"\n'
         cmd += f'TEXT 16,{price_y},"TSS24.BF2",0,1,1,"{price}"\n'
         cmd += f'PRINT 1,{qty}\n'
