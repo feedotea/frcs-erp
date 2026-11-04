@@ -1655,7 +1655,16 @@ function renderTxns(){
          <div class="mono" style="font-size:18px;font-weight:700;color:${+dc.diff===0?'var(--green)':'var(--red)'}">${+dc.diff>0?'+':''}${(+dc.diff).toLocaleString()}</div>
        </div><button class="btn ghost sm" style="margin-top:8px" onclick="openDayClose()">重新日結</button></div>`
     : `<button class="btn" onclick="openDayClose()">日結 · 對錢箱</button>`;
-  document.getElementById('txnSummary').innerHTML=`<div class="kpi">${kpi}</div>${payRows}${closeBox}`;
+  /* 今日售出品項:所有單合併,按規格 */
+  const sold={};
+  txns.forEach(t=>t.items.forEach(i=>{
+    const k=i.no; const b=sold[k]||(sold[k]={no:k,name:i.name,qty:0,amt:0});
+    b.qty+=i.qty; b.amt+=(i.price||0)*i.qty;
+  }));
+  const soldRows=Object.values(sold).sort((a,b)=>b.qty-a.qty||b.amt-a.amt);
+  const soldBox=soldRows.length?`<h2 class="sec" style="margin-top:16px">今日售出品項 · ${soldRows.reduce((a,x)=>a+x.qty,0)} 件</h2>
+    <div class="ledger" style="margin-bottom:12px">${soldRows.map(x=>`<div class="lr"><span class="l">${x.name}<br><span style="font-size:10px">${x.no}</span></span><span style="white-space:nowrap">×${x.qty} · ${money(x.amt)}</span></div>`).join('')}</div>`:'';
+  document.getElementById('txnSummary').innerHTML=`<div class="kpi">${kpi}</div>${payRows}${closeBox}${soldBox}`;
   const el=document.getElementById('txnList');
   if(!all.length){el.innerHTML=`<div class="empty">今天還沒有交易</div>`;return;}
   const canVoid=canSeeCost()&&!dc;
