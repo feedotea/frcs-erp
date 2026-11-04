@@ -202,7 +202,12 @@ def label_bytes(items):
             y += 26
         price_y = H - 30                              # 價格貼底
         bar_h = max(40, price_y - y - 30)             # 條碼高度：剩下的空間扣掉底下數字那行
-        cmd += f'BARCODE 16,{y},"128",{bar_h},1,0,2,2,"{no}"\n'
+        if no.isascii() and no.strip():
+            cmd += f'BARCODE 16,{y},"128",{bar_h},1,0,2,2,"{no}"\n'
+        else:
+            # 編號含中文印不成條碼（機器只會印一個 ?），改印提示，請老闆把編號改成數字
+            cmd += f'TEXT 16,{y},"TSS24.BF2",0,1,1,"編號非數字:{no[:10]}"\n'
+            cmd += f'TEXT 16,{y+28},"TSS24.BF2",0,1,1,"請改編號再印"\n'
         cmd += f'TEXT 16,{price_y},"TSS24.BF2",0,1,1,"{price}"\n'
         cmd += f'PRINT 1,{qty}\n'
         out += cmd.encode(LABEL_ENC, errors='replace')

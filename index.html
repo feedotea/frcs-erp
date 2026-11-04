@@ -1925,7 +1925,7 @@ function styleForm(g){
   const priceLocked=!isNew && !canSeeCost();
   return `<button class="xclose" onclick="closeModal()">✕</button>
     <h3>${isNew?'新增商品':'編輯商品'}</h3>
-    <div class="sub">${isNew?'款式編號建好不能改;有尺寸顏色的話每個規格會有自己的條碼':g.styleNo+(!g.active?' · 已下架':'')}</div>
+    <div class="sub">${isNew?'款式編號只能數字或英文(條碼用),建好不能改;有尺寸顏色的話每個規格會有自己的條碼':g.styleNo+(!g.active?' · 已下架':'')}</div>
 
     <label class="fld">商品圖片 <span class="opt">· 選填,清單和收銀會顯示</span></label>
     <div class="photo-box">
@@ -2001,6 +2001,7 @@ async function saveStyle(){
   const isNew=sf.isNew;
   const styleNo=isNew?val('st_no'):sf.styleNo;
   if(!styleNo){toast('請填款式編號');return;}
+  if(!/^[0-9A-Za-z-]+$/.test(styleNo)){toast('款式編號只能用數字或英文,中文印不成條碼');return;}
   if(isNew && state.styles.some(s=>(s.styleNo||s.no)===styleNo||s.no===styleNo)){toast('此編號已存在');return;}
   const name=val('st_name'); if(!name){toast('請填品名');return;}
   if(!styleSel.gender){toast('選一個性別線');return;}
@@ -2283,6 +2284,7 @@ function doAddPOItem(no){
   const p=state.purchases.find(x=>x.no===no);
   const styleNo=val('ai_no').trim();
   if(!styleNo){toast('請填款式編號');return;}
+  if(!/^[0-9A-Za-z-]+$/.test(styleNo)){toast('款式編號只能用數字或英文,中文印不成條碼');return;}
   const name=val('ai_name')||'未命名';
   if(!styleSel.gender||!styleSel.cat){toast('選性別線和品類');return;}
   const fx=+val('ai_fx')||0, qty=+val('ai_qty')||1, price=+val('ai_price')||0;
