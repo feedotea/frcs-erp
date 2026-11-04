@@ -9,6 +9,7 @@ FRCS 收銀橋 —— 讓 FRCS INVENTORY 網頁可以印收據、開錢箱、印
   GET  /open    開錢箱（ESC p 脈衝，透過出單機 DK 孔）
   POST /print   JSON = 收據內容（index.html printReceipt 送的那包），kick:true 會順便開錢箱
   POST /label   JSON = {"items":[{"name","variant","no","price","qty"}]}  → TSPL 貼紙機
+  GET  /calibrate 貼紙機重新偵測間隙（換紙後印歪、疊印時用）
 
 出單機 TP805 的接法（二選一，環境變數決定）：
   FRCS_PRINTER=192.168.1.60            網路孔，走 TCP 9100（建議；不用驅動）
@@ -189,7 +190,7 @@ def label_bytes(items):
         no = str(it.get('no', ''))
         price = money(it.get('price', 0))
         y = LABEL_TOP
-        cmd = f'SIZE {w} mm,{h} mm\nGAP 2 mm,0\nDIRECTION 1\nREFERENCE 0,0\nCLS\n'
+        cmd = f'SIZE {w} mm,{h} mm\nGAP 2 mm,0\nSET TEAR ON\nDIRECTION 1\nREFERENCE 0,0\nCLS\n'
         cmd += f'TEXT 16,{y},"TSS24.BF2",0,1,1,"{name}"\n'
         y += 28
         if variant:
@@ -202,6 +203,12 @@ def label_bytes(items):
         cmd += f'PRINT 1,{qty}\n'
         out += cmd.encode(LABEL_ENC, errors='replace')
     return out
+
+
+def calibrate_bytes():
+    """讓貼紙機重新偵測貼紙間隙。換紙、開蓋後要做一次，不然會印在同一張上或位置偏掉。"""
+    w, h = (int(x) for x in LABEL_SIZE.lower().split('x'))
+    return f'SIZE {w} mm,{h} mm\nGAP 2 mm,0\nGAPDETECT\nSET TEAR ON\n'.encode('ascii')
 
 
 def send_label(data):
@@ -252,6 +259,14 @@ class H(http.server.BaseHTTPRequestHandler):
         path = self.path.split('?')[0]
         if path == '/ping':
             self.reply(200, {'ok': True, 'printer': printer_up(), 'label': label_up(), 'printerAddr': PRINTER or SERIAL or '', 'labelAddr': LABEL or LABEL_QUEUE})
+        elif path == '/calibrate':
+            try:
+                if not (LABEL or LABEL_QUEUE):
+                    raise RuntimeError('沒設貼紙機')
+                send_label(calibrate_bytes())
+                self.reply(200, {'ok': True})
+            except Exception as e:
+                self.reply(200, {'ok': False, 'message': str(e)})
         elif path == '/open':
             try:
                 send_printer(INIT + KICK)

@@ -55,7 +55,10 @@ PING=$(curl -s -m 3 http://127.0.0.1:9999/ping || true)
 echo "   $PING"
 case "$PING" in
   *'"label": true'*)
-    echo "⑤ 印一張測試貼紙…"
+    echo "⑤ 校正貼紙間隙（會走幾張空白紙，正常）…"
+    curl -s -m 20 http://127.0.0.1:9999/calibrate; echo
+    sleep 4
+    echo "⑥ 印一張測試貼紙…"
     curl -s -m 20 -X POST http://127.0.0.1:9999/label -H 'Content-Type: application/json' \
       -d '{"items":[{"name":"測試商品","variant":"黑 / M","no":"2149701","price":1480,"qty":1}]}'
     echo
