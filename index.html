@@ -461,7 +461,11 @@
     <!-- 標籤 -->
     <div class="view" id="v-labels">
       <h2 class="sec">標籤列印 LABELS</h2>
-      <div class="hint">用商品編號產生 Code128 條碼。勾選要印的,按列印時選你的貼紙機。</div>
+      <div class="hint">勾要印的、填張數,按列印。搜尋只是篩選顯示,勾過的都會記住。</div>
+      <div class="scanbox" style="border-color:var(--line);margin-top:10px">
+        <span class="scanic">⌕</span>
+        <input class="f scanin" id="lblSearch" placeholder="搜尋編號、品名或掃條碼" oninput="renderLabels()" autocomplete="off">
+      </div>
       <div id="lblPickList" style="margin-top:10px"></div>
       <div class="btn-row">
         <button class="btn ghost sm" onclick="lblAll(true)">全選</button>
@@ -1696,28 +1700,47 @@ function advancePreTrack(no){
 }
 
 /* ---------------- labels ---------------- */
+function lblState(){
+  state.lblSel=state.lblSel||{};
+  state.styles.filter(x=>x.active!==false).forEach(x=>{ if(!state.lblSel[x.no]) state.lblSel[x.no]={on:x.qty>0,qty:Math.max(1,x.qty)}; });
+  return state.lblSel;
+}
+function lblSet(no,k,v){ const m=lblState(); if(!m[no])m[no]={on:false,qty:1}; m[no][k]=k==='qty'?Math.max(1,+v||1):v; lblCount(); }
+function lblCount(){
+  const m=lblState(); const el=document.getElementById('lblCount'); if(!el)return;
+  const on=Object.entries(m).filter(([no,x])=>x.on&&findStyle(no)&&findStyle(no).active!==false);
+  el.textContent=on.length?`已勾 ${on.length} 項 · 共 ${on.reduce((a,[,x])=>a+x.qty,0)} 張`:'還沒勾任何商品';
+}
 function renderLabels(){
   const el=document.getElementById('lblPickList');
+  const m=lblState();
   const direct=labelReady;
-  el.innerHTML=`<div class="hint" style="margin-bottom:8px;${direct?'color:var(--green)':''}">${direct?'✓ 已接貼紙機,按列印直接出貼紙。':'沒接貼紙機,會用瀏覽器列印。'}右邊填每項要印幾張,預設 = 庫存數。</div>`+
-    state.styles.filter(s=>s.active!==false).map(s=>`<label class="lblpick">
-    <input type="checkbox" class="lblchk" data-no="${s.no}" ${s.qty>0?'checked':''}>
-    <span style="flex:1">${skuLabel(s)}</span>
-    <span style="color:var(--muted)">${s.no}</span>
-    <input class="f lblqty" type="number" inputmode="numeric" min="1" data-no="${s.no}" value="${Math.max(1,s.qty)}" style="width:52px;padding:4px;text-align:center" onclick="event.preventDefault()">
-  </label>`).join('');
+  const q=(document.getElementById('lblSearch')?.value||'').trim();
+  const groups=styleGroups(false).filter(g=>!q||g.styleNo.includes(q)||g.name.includes(q)||g.skus.some(x=>x.no.includes(q)));
+  el.innerHTML=`<div class="hint" style="margin-bottom:8px;${direct?'color:var(--green)':''}">${direct?'✓ 已接貼紙機,按列印直接出貼紙。':'沒接貼紙機,會用瀏覽器列印。'}<span id="lblCount" style="margin-left:6px"></span></div>`+
+    (groups.length?groups.map(g=>`<div style="margin-bottom:10px">
+      <div class="style-no" style="margin-bottom:4px">${g.styleNo} · ${g.name}</div>
+      ${g.skus.filter(x=>x.active!==false).map(x=>`<label class="lblpick">
+        <input type="checkbox" class="lblchk" data-no="${x.no}" ${m[x.no].on?'checked':''} onchange="lblSet('${x.no}','on',this.checked)">
+        <span style="flex:1">${variantLabel(x)||g.name}</span>
+        <span style="color:var(--muted)">${x.no} · 庫存 ${x.qty}</span>
+        <input class="f lblqty" type="number" inputmode="numeric" min="1" data-no="${x.no}" value="${m[x.no].qty}" style="width:52px;padding:4px;text-align:center" onclick="event.preventDefault()" oninput="lblSet('${x.no}','qty',this.value)">
+      </label>`).join('')}</div>`).join('')
+    :`<div class="empty">${q?'查無符合商品':'還沒有商品'}</div>`);
+  lblCount();
 }
-function lblAll(on){document.querySelectorAll('.lblchk').forEach(c=>c.checked=on);}
+function lblAll(on){
+  const m=lblState();
+  document.querySelectorAll('#lblPickList .lblchk').forEach(c=>{ c.checked=on; m[c.dataset.no].on=on; });
+  lblCount();
+}
 async function printLabels(){
-  const picks=[...document.querySelectorAll('.lblchk:checked')];
+  const m=lblState();
+  const picks=Object.entries(m).filter(([no,x])=>x.on&&findStyle(no)&&findStyle(no).active!==false).map(([no,x])=>({s:findStyle(no),q:x.qty}));
   if(!picks.length){toast('請至少勾選一項');return;}
   /* 有貼紙機就直送,不跳列印視窗 */
   if(labelReady){
-    const items=picks.map(chk=>{
-      const s=findStyle(chk.getAttribute('data-no'));
-      const q=+(document.querySelector(`.lblqty[data-no="${s.no}"]`)?.value||1)||1;
-      return {name:s.name,variant:variantLabel(s),no:s.no,price:s.price,qty:q};
-    });
+    const items=picks.map(({s,q})=>({name:s.name,variant:variantLabel(s),no:s.no,price:s.price,qty:q}));
     const total=items.reduce((a,i)=>a+i.qty,0);
     if(total>50 && !window.confirm(`要印 ${total} 張貼紙,確定?`))return;
     toast('送出 '+total+' 張…');
@@ -1726,9 +1749,8 @@ async function printLabels(){
   }
   const area=document.getElementById('printArea');
   /* 瀏覽器列印:每項照張數重複 */
-  area.innerHTML='<div class="lblgrid">'+picks.flatMap(chk=>{
-    const s=findStyle(chk.getAttribute('data-no'));
-    const q=Math.min(200,+(document.querySelector(`.lblqty[data-no="${s.no}"]`)?.value||1)||1);
+  area.innerHTML='<div class="lblgrid">'+picks.flatMap(({s,q})=>{
+    q=Math.min(200,q);
     const card=`<div class="lblcard">
       <div class="lname">${s.name}</div>
       <div class="ln">${variantLabel(s)?variantLabel(s)+' · ':''}${s.gender}${s.cat}</div>
@@ -2129,9 +2151,11 @@ function receivePO(no){
       setMode('stock');
       showView('v-labels','labels');
       setTimeout(()=>{
-        document.querySelectorAll('.lblchk').forEach(c=>
-          c.checked=p.items.some(i=>i.no===c.getAttribute('data-no')));
-        toast('已勾選這批 '+p.items.length+' 項');
+        const m=lblState();
+        Object.keys(m).forEach(no=>m[no].on=false);
+        p.items.forEach(i=>{ m[i.no]={on:true,qty:Math.max(1,i.qty)}; });
+        renderLabels();
+        toast('已勾選這批 '+p.items.length+' 項,張數 = 進貨數');
       },100);
     }
   },600);
