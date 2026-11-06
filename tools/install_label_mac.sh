@@ -26,6 +26,8 @@ if ! lpadmin -p "$QUEUE" -E -v "$URI" -m raw 2>/dev/null; then
   # 新版 macOS 不給 -m raw：用 everywhere 建，lp -o raw 一樣可以直送
   lpadmin -p "$QUEUE" -E -v "$URI" -m everywhere 2>/dev/null || lpadmin -p "$QUEUE" -E -v "$URI"
 fi
+# 印表機不在時工作重試、不要把佇列停掉
+lpadmin -p "$QUEUE" -o printer-error-policy=retry-current-job 2>/dev/null || true
 cupsenable "$QUEUE" 2>/dev/null || true
 cupsaccept "$QUEUE" 2>/dev/null || true
 lpstat -p "$QUEUE" | sed 's/^/   /'

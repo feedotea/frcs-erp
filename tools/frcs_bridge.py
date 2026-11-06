@@ -103,10 +103,24 @@ def printer_up():
     return False
 
 
+def queue_revive():
+    """貼紙機關機時有人按列印，CUPS 會把佇列標成暫停、工作卡住；印之前先解除、清掉舊工作。"""
+    for cmd in (['cupsenable', LABEL_QUEUE], ['cupsaccept', LABEL_QUEUE], ['cancel', '-a', LABEL_QUEUE]):
+        try:
+            subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        except Exception:
+            pass
+
+
 def label_up():
     if LABEL_QUEUE:
         try:
             r = subprocess.run(['lpstat', '-p', LABEL_QUEUE], capture_output=True, text=True, timeout=5)
+            if r.returncode != 0:
+                return False
+            if 'disabled' in r.stdout or 'Paused' in r.stdout:
+                queue_revive()
+                r = subprocess.run(['lpstat', '-p', LABEL_QUEUE], capture_output=True, text=True, timeout=5)
             return r.returncode == 0 and 'disabled' not in r.stdout
         except Exception:
             return False
@@ -244,6 +258,7 @@ def calibrate_bytes():
 def send_label(data):
     if LABEL_QUEUE:
         # USB：丟給 CUPS 佇列，-o raw 不經任何轉換，TSPL 原樣進印表機
+        queue_revive()
         with tempfile.NamedTemporaryFile('wb', suffix='.tspl', delete=False) as f:
             f.write(data)
             path = f.name
