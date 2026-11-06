@@ -1118,7 +1118,7 @@ function showView(viewId, tabId){
   document.getElementById(viewId).classList.add('on');
   renderTabs();
   document.getElementById('body').scrollTop=0;
-  if(tabId==='register')renderRegister();
+  if(tabId==='register'){ renderRegister(); drawerPing().then(ok=>{ const b=document.getElementById('drawerBtn'); if(b) b.style.display=ok?'':'none'; }); }
   if(tabId==='members')renderMembers();
   if(tabId==='txns')renderTxns();
   if(tabId==='preorders')renderPreTrack();
@@ -1126,7 +1126,7 @@ function showView(viewId, tabId){
   if(tabId==='styles'){renderStyleActions();renderStyles();}
   if(tabId==='intake')fillIntakeSelect();
   if(tabId==='count')renderCount();
-  if(tabId==='labels')renderLabels();
+  if(tabId==='labels'){ renderLabels(); drawerPing().then(()=>{ if(document.getElementById('v-labels').classList.contains('on')) renderLabels(); }); }
   if(tabId==='returns'){fillSaleStyles();renderReturnList();}
   if(tabId==='velocity')renderVelocity();
   if(tabId==='purchase')renderPurchase();
@@ -1775,6 +1775,7 @@ function lblAll(on){
   lblCount();
 }
 async function printLabels(){
+  if(!labelReady){ await drawerPing(); if(labelReady) renderLabels(); }
   const m=lblState();
   const picks=Object.entries(m).filter(([no,x])=>x.on&&findStyle(no)&&findStyle(no).active!==false).map(([no,x])=>({s:findStyle(no),q:x.qty}));
   if(!picks.length){toast('請至少勾選一項');return;}
@@ -3348,6 +3349,16 @@ else setSync(sb?'syncing':'offline');
 window.addEventListener('online', ()=>{ toast('網路已恢復'); flushQueue(); });
 window.addEventListener('offline', ()=>{ setSync('error'); lastError='裝置目前沒有網路'; });
 
+/* 每 60 秒探一次橋接程式:iMac 重開、貼紙機後來才開機都能自動接上 */
+setInterval(()=>{
+  if(!state.account) return;
+  const was=labelReady, wasD=drawerReady;
+  drawerPing().then(ok=>{
+    const b=document.getElementById('drawerBtn'); if(b) b.style.display=ok?'':'none';
+    if(labelReady!==was && document.getElementById('v-labels').classList.contains('on')) renderLabels();
+    if(ok && !wasD && state.account) toast('已連上收銀主機');
+  });
+}, 60000);
 /* 每 60 秒自動嘗試補送,店員不必做任何事 */
 setInterval(()=>{ if(pendingQueue.length && navigator.onLine) flushQueue(); }, 60000);
 </script>
