@@ -841,7 +841,7 @@ function normItem(i){
     cost:Number(i.cost)||0, price:Number(i.price)||0,
     qty:Number(i.qty)||0, low:Number(i.low)||1,
     styleNo:i.styleNo||String(i.no), size:i.size||'', color:i.color||'',
-    photo:i.photo||'', note:i.note||'', active:i.active!==false,
+    photo:i.photo||'', vendor:i.vendor||'', note:i.note||'', active:i.active!==false,
     elsewhere:(i.elsewhere||[]).filter(e=>Number(e.qty)>0)};
 }
 
@@ -1213,7 +1213,7 @@ function renderStyles(){
     (g.active || state.showInactive) &&
     (state.filter.cat==='全部'||g.cat===state.filter.cat) &&
     (state.filter.gender==='全部'||g.gender===state.filter.gender) &&
-    (!q||g.styleNo.includes(q)||g.name.includes(q)||g.skus.some(s=>s.no.includes(q))));
+    (!q||g.styleNo.includes(q)||g.name.includes(q)||(g.vendor||'').includes(q)||g.skus.some(s=>s.no.includes(q))));
   const hidden=all.filter(g=>!g.active).length;
   const foot=(canSeeCost()&&hidden)?`<div class="hint" style="text-align:center;margin-top:6px;cursor:pointer" onclick="toggleInactive()">${state.showInactive?'隱藏已下架':'顯示 '+hidden+' 款已下架'}</div>`:'';
   if(!groups.length){el.innerHTML=`<div class="empty">${q?'查無符合商品':'此分類沒有商品'}</div>`+foot;return;}
@@ -1231,6 +1231,7 @@ function renderStyles(){
         <div style="flex:1;min-width:0">
           <div class="style-no">${g.styleNo}${!g.active?' · 已下架':''}${hasVariants(g)?' · '+act.length+' 個規格':''}</div>
           <div class="style-name">${g.name}</div>
+          ${g.vendor?`<div class="style-meta">${g.vendor}</div>`:''}
           <div class="tags-row">
             <span class="tag gender">${g.gender}</span>
             <span class="tag cat">${g.cat}</span>
@@ -1960,7 +1961,9 @@ function styleForm(g){
 
     <label class="fld">安全量 <span class="opt">· 每個規格低於這個數就進叫貨清單</span></label>
     <input class="f" id="st_low" type="number" value="${isNew?1:g.low}" inputmode="numeric">
-    <label class="fld">備註 <span class="opt">· 選填</span></label><input class="f" id="st_note" value="${isNew?'':(g.note||'').replace(/"/g,'&quot;')}" placeholder="材質、廠商…">
+    <label class="fld">廠商 <span class="opt">· 選填,採購入倉會自動帶</span></label>
+    <input class="f" id="st_vendor" list="st_vendors" value="${isNew?'':(g.vendor||'').replace(/"/g,'&quot;')}" placeholder="從清單選或直接打">
+    <datalist id="st_vendors">${(state.vendors||[]).map(v=>`<option value="${v.name.replace(/"/g,'&quot;')}">`).join('')}</datalist>
 
     <h2 class="sec" style="margin-top:18px">規格 尺寸 × 顏色</h2>
     <div class="hint">都留空 = 單一規格,一個條碼。有填的話每個尺寸顏色各一個條碼,編號自動接在款式編號後面。</div>
@@ -2015,7 +2018,7 @@ async function saveStyle(){
   if(dup){toast('條碼 '+dup.no+' 已被別的商品用掉');return;}
   const btn=document.getElementById('st_save'); btn.disabled=true; btn.textContent='儲存中…';
 
-  const pStyle={styleNo, name, cat:styleSel.cat, gender:styleSel.gender, low:+val('st_low')||1, note:val('st_note')};
+  const pStyle={styleNo, name, cat:styleSel.cat, gender:styleSel.gender, low:+val('st_low')||1, vendor:val('st_vendor'), note:(sf.g&&sf.g.note)||''};
   if(!priceEl.disabled) pStyle.price=price;
   if(canSeeCost() && document.getElementById('st_cost')) pStyle.cost=+val('st_cost')||0;
   if(pendingPhoto){
@@ -2027,7 +2030,7 @@ async function saveStyle(){
   /* 本機先更新 */
   const g=sf.g;
   const oldPhoto=g?g.photo:'';
-  const base={name,cat:styleSel.cat,gender:styleSel.gender,low:pStyle.low,note:pStyle.note,
+  const base={name,cat:styleSel.cat,gender:styleSel.gender,low:pStyle.low,note:pStyle.note,vendor:pStyle.vendor,
     price:('price' in pStyle)?pStyle.price:(g?g.price:0), cost:('cost' in pStyle)?pStyle.cost:(g?g.cost:0),
     photo:('photo' in pStyle)?pStyle.photo:oldPhoto, active:true};
   const keep=new Set(pSkus.map(x=>x.no));
@@ -2175,11 +2178,11 @@ function receivePO(no){
   p.items.forEach(i=>{
     const cost=Math.round(poUnitCost(p,i));
     const ex=findStyle(i.no);
-    if(ex){ ex.qty+=i.qty; ex.cost=cost; ex.active=true; updated++; }
+    if(ex){ ex.qty+=i.qty; ex.cost=cost; ex.active=true; if(!ex.vendor) ex.vendor=p.vendor||''; updated++; }
     else{
       const g=findGroup(i.styleNo||i.no);
       state.styles.unshift({no:i.no,styleNo:i.styleNo||i.no,size:i.size||'',color:i.color||'',name:i.name,cat:i.cat,gender:i.gender,
-        cost, price:i.price||(g?g.price:0)||Math.round(cost*2.8/10)*10, qty:i.qty, low:1, photo:g?g.photo:'', note:'', active:true, elsewhere:[]});
+        cost, price:i.price||(g?g.price:0)||Math.round(cost*2.8/10)*10, qty:i.qty, low:1, photo:g?g.photo:'', vendor:p.vendor||'', note:'', active:true, elsewhere:[]});
       created++;
     }
     state.intakeLog.unshift({date:today(),time:nowHM(),no:i.no,name:i.name,qty:i.qty,kind:'receive'});
@@ -2742,7 +2745,8 @@ function styleGroups(includeInactive){
     const k=s.styleNo||s.no;
     let g=map.get(k);
     if(!g){ g={styleNo:k,name:s.name,cat:s.cat,gender:s.gender,price:s.price,cost:s.cost,photo:s.photo||'',
-              note:s.note||'',low:s.low,active:false,skus:[],qty:0}; map.set(k,g); }
+              vendor:s.vendor||'',note:s.note||'',low:s.low,active:false,skus:[],qty:0}; map.set(k,g); }
+    if(!g.vendor&&s.vendor) g.vendor=s.vendor;
     g.skus.push(s);
     if(s.active!==false){ g.qty+=s.qty; g.active=true; }
     if(!g.photo&&s.photo) g.photo=s.photo;

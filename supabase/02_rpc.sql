@@ -69,7 +69,7 @@ begin
                  'no', i.no, 'styleNo', i.style_no, 'size', i.size, 'color', i.color,
                  'name', i.name, 'cat', i.cat, 'gender', i.gender,
                  'cost', case when v_owner then i.cost else 0 end,
-                 'price', i.price, 'low', i.low, 'photo', i.photo, 'note', i.note, 'active', i.active,
+                 'price', i.price, 'low', i.low, 'photo', i.photo, 'vendor', i.vendor, 'note', i.note, 'active', i.active,
                  'qty', coalesce((select s.qty from frcs_v_stock s where s.store = v_store and s.no = i.no), 0),
                  'elsewhere', coalesce((select jsonb_agg(jsonb_build_object('store', s.store, 'qty', s.qty))
                                         from frcs_v_stock s where s.no = i.no and s.store <> v_store and s.qty > 0), '[]'::jsonb)
@@ -702,15 +702,17 @@ begin
     v_qty  := coalesce((it->>'qty')::int, 0);
     v_cost := round(coalesce((it->>'unitFx')::numeric, 0) * po.rate + v_extra);
     if exists (select 1 from frcs_items where no = it->>'no') then
-      update frcs_items set cost = v_cost, active = true, updated_at = now() where no = it->>'no';
+      update frcs_items set cost = v_cost, active = true, updated_at = now(),
+             vendor = coalesce(vendor, po.vendor)
+       where no = it->>'no';
       v_upd := v_upd + 1;
     else
-      insert into frcs_items (no, style_no, size, color, name, cat, gender, cost, price, low)
+      insert into frcs_items (no, style_no, size, color, name, cat, gender, cost, price, low, vendor)
       values (it->>'no', coalesce(nullif(it->>'styleNo', ''), it->>'no'), nullif(it->>'size', ''), nullif(it->>'color', ''),
               coalesce(nullif(it->>'name', ''), '未命名'), coalesce(nullif(it->>'cat', ''), '上衣'),
               coalesce(nullif(it->>'gender', ''), '男'), v_cost,
               case when coalesce((it->>'price')::numeric, 0) > 0 then (it->>'price')::numeric
-                   else round(v_cost * 2.8 / 10) * 10 end, 1);
+                   else round(v_cost * 2.8 / 10) * 10 end, 1, po.vendor);
       v_new := v_new + 1;
     end if;
     if v_qty > 0 then
@@ -834,16 +836,19 @@ begin
       raise exception '條碼 % 已經是別的款式在用', v_no using errcode = '22023';
     end if;
     v_new := not exists (select 1 from frcs_items where no = v_no);
-    insert into frcs_items (no, style_no, size, color, name, cat, gender, cost, price, low, photo, note, active)
+    insert into frcs_items (no, style_no, size, color, name, cat, gender, cost, price, low, photo, vendor, note, active)
     values (v_no, v_sn, nullif(trim(r->>'size'), ''), nullif(trim(r->>'color'), ''),
             coalesce(nullif(trim(p_style->>'name'), ''), '未命名'),
             coalesce(nullif(p_style->>'cat', ''), '上衣'), coalesce(nullif(p_style->>'gender', ''), '男'),
-            v_cost, v_price, coalesce((p_style->>'low')::int, 1), v_photo, nullif(p_style->>'note', ''), true)
+            v_cost, v_price, coalesce((p_style->>'low')::int, 1), v_photo,
+            nullif(trim(p_style->>'vendor'), ''), nullif(p_style->>'note', ''), true)
     on conflict (no) do update set
       style_no = excluded.style_no, size = excluded.size, color = excluded.color,
       name = excluded.name, cat = excluded.cat, gender = excluded.gender,
       cost = excluded.cost, price = excluded.price, low = excluded.low,
-      photo = excluded.photo, note = excluded.note, active = true, updated_at = now();
+      photo = excluded.photo, note = excluded.note, active = true, updated_at = now(),
+      -- 沒帶 vendor 這個 key 就保留原值
+      vendor = case when p_style ? 'vendor' then excluded.vendor else frcs_items.vendor end;
     v_kept := v_kept || v_no;
     if v_new then n_new := n_new + 1; else n_upd := n_upd + 1; end if;
 

@@ -92,6 +92,7 @@ create table if not exists frcs_items (
   price      numeric not null default 0,          -- 售價
   low        int     not null default 1,          -- 安全量
   photo      text,                                -- Storage 公開網址
+  vendor     text,                                -- 廠商（採購入倉自動帶入，也可手填）
   note       text,
   active     boolean not null default true,       -- false = 下架，不出現在清單
   created_at timestamptz not null default now(),
