@@ -1231,7 +1231,7 @@ function renderStyles(){
         <div style="flex:1;min-width:0">
           <div class="style-no">${g.styleNo}${!g.active?' · 已下架':''}${hasVariants(g)?' · '+act.length+' 個規格':''}</div>
           <div class="style-name">${g.name}</div>
-          ${g.vendor?`<div class="style-meta">${g.vendor}</div>`:''}
+          ${(g.vendor||g.note)?`<div class="style-meta">${[g.vendor,g.note].filter(Boolean).join(' · ')}</div>`:''}
           <div class="tags-row">
             <span class="tag gender">${g.gender}</span>
             <span class="tag cat">${g.cat}</span>
@@ -1964,6 +1964,7 @@ function styleForm(g){
     <label class="fld">廠商 <span class="opt">· 選填,採購入倉會自動帶</span></label>
     <input class="f" id="st_vendor" list="st_vendors" value="${isNew?'':(g.vendor||'').replace(/"/g,'&quot;')}" placeholder="從清單選或直接打">
     <datalist id="st_vendors">${(state.vendors||[]).map(v=>`<option value="${v.name.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+    <label class="fld">備註 <span class="opt">· 材質、產地…</span></label><input class="f" id="st_note" value="${isNew?'':(g.note||'').replace(/"/g,'&quot;')}" placeholder="100%棉">
 
     <h2 class="sec" style="margin-top:18px">規格 尺寸 × 顏色</h2>
     <div class="hint">都留空 = 單一規格,一個條碼。有填的話每個尺寸顏色各一個條碼,編號自動接在款式編號後面。</div>
@@ -2018,7 +2019,7 @@ async function saveStyle(){
   if(dup){toast('條碼 '+dup.no+' 已被別的商品用掉');return;}
   const btn=document.getElementById('st_save'); btn.disabled=true; btn.textContent='儲存中…';
 
-  const pStyle={styleNo, name, cat:styleSel.cat, gender:styleSel.gender, low:+val('st_low')||1, vendor:val('st_vendor'), note:(sf.g&&sf.g.note)||''};
+  const pStyle={styleNo, name, cat:styleSel.cat, gender:styleSel.gender, low:+val('st_low')||1, vendor:val('st_vendor'), note:val('st_note')};
   if(!priceEl.disabled) pStyle.price=price;
   if(canSeeCost() && document.getElementById('st_cost')) pStyle.cost=+val('st_cost')||0;
   if(pendingPhoto){
