@@ -1147,8 +1147,7 @@ function openPin(){
     <h3>老闆模式</h3><div class="sub">輸入 PIN 解鎖庫存與帳務</div>
     <input class="f" id="pin_in" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
       style="text-align:center;font-size:24px;letter-spacing:8px" onkeydown="if(event.key==='Enter')doPin()">
-    <button class="btn" style="margin-top:14px" onclick="doPin()">解鎖</button>
-    <div class="hint">預設 PIN 為 1234,解鎖後可在帳務→開銷頁底變更。</div>`);
+    <button class="btn" style="margin-top:14px" onclick="doPin()">解鎖</button>`);
   setTimeout(()=>document.getElementById('pin_in').focus(),100);
 }
 async function doPin(){
