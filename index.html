@@ -883,6 +883,21 @@ async function enterApp(){
   renderModebar(); renderStoreBar(); refreshCurrentView();
   const b=document.getElementById('drawerBtn');
   drawerPing().then(ok=>{ if(b && ok) b.style.display=''; });
+  startIdleLogout();
+}
+let lastActivityTime=Date.now();
+function resetIdleTimer(){lastActivityTime=Date.now();}
+function startIdleLogout(){
+  ['mousedown','keydown','touchstart','click'].forEach(e=>document.addEventListener(e,resetIdleTimer));
+  setInterval(()=>{
+    if(Date.now()-lastActivityTime>15*60*1000){
+      document.removeEventListener('mousedown',resetIdleTimer);
+      document.removeEventListener('keydown',resetIdleTimer);
+      document.removeEventListener('touchstart',resetIdleTimer);
+      document.removeEventListener('click',resetIdleTimer);
+      signOut();
+    }
+  },60000);
 }
 
 /* ---------------- 商品圖片 ---------------- */
