@@ -1144,7 +1144,7 @@ function renderStyleActions(){
 /* ---------------- PIN / role ---------------- */
 function openPin(){
   openModal(`<button class="xclose" onclick="closeModal()">✕</button>
-    <h3>老闆模式</h3><div class="sub">輸入 PIN 解鎖庫存與帳務</div>
+    <div class="sub">輸入 PIN 解鎖庫存與帳務</div>
     <input class="f" id="pin_in" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
       style="text-align:center;font-size:24px;letter-spacing:8px" onkeydown="if(event.key==='Enter')doPin()">
     <button class="btn" style="margin-top:14px" onclick="doPin()">解鎖</button>`);
