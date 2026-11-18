@@ -890,7 +890,7 @@ function resetIdleTimer(){lastActivityTime=Date.now();}
 function startIdleLogout(){
   ['mousedown','keydown','touchstart','click'].forEach(e=>document.addEventListener(e,resetIdleTimer));
   setInterval(()=>{
-    if(Date.now()-lastActivityTime>15*60*1000){
+    if(Date.now()-lastActivityTime>24*60*60*1000){
       document.removeEventListener('mousedown',resetIdleTimer);
       document.removeEventListener('keydown',resetIdleTimer);
       document.removeEventListener('touchstart',resetIdleTimer);
