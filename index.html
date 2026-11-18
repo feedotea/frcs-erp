@@ -320,8 +320,8 @@
 <div class="lock" id="lockScreen">
   <div class="box">
     <div class="brand">DIM<small>INVENTORY & LEDGER</small></div>
-    <label class="fld">帳號 EMAIL</label>
-    <input class="f" id="lg_email" type="email" autocomplete="username" inputmode="email" placeholder="you@example.com">
+    <label class="fld">帳號 (工號或郵箱)</label>
+    <input class="f" id="lg_email" type="text" autocomplete="username" placeholder="staff001 或 email@example.com">
     <label class="fld">密碼 PASSWORD</label>
     <input class="f" id="lg_pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
     <button class="btn" id="lg_btn" style="margin-top:16px" onclick="signIn()">登入</button>
@@ -847,10 +847,11 @@ function normItem(i){
 /* ---------------- 登入 ---------------- */
 function showLock(show){ const l=document.getElementById('lockScreen'); if(l) l.style.display=show?'flex':'none'; }
 async function signIn(){
-  const email=val('lg_email'), pw=document.getElementById('lg_pw').value;
+  let email=val('lg_email'), pw=document.getElementById('lg_pw').value;
   const err=document.getElementById('lg_err'), btn=document.getElementById('lg_btn');
   if(!sb){ err.textContent='index.html 還沒填 Supabase 網址與 anon key'; return; }
   if(!email||!pw){ err.textContent='請填帳號和密碼'; return; }
+  if(!email.includes('@')) email=email+'@dim.local';
   btn.disabled=true; btn.textContent='登入中…'; err.textContent='';
   const {error}=await sb.auth.signInWithPassword({email,password:pw});
   btn.disabled=false; btn.textContent='登入';
