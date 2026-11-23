@@ -1350,13 +1350,25 @@ function clearCart(confirm){
   if(confirm && state.cart.length && !window.confirm('清空購物車?'))return;
   state.cart=[];state.cartMember=null;state.cartDiscount=0;renderRegister();
 }
-function cartSubtotal(){return state.cart.reduce((a,c)=>a+c.price*c.qty,0);}
+function cartSubtotal(){
+  return state.cart.reduce((a,c)=>{
+    const basePrice=c.price*c.qty;
+    const tempDisc=c.tempDiscount||0;
+    const afterDisc=basePrice*(1-tempDisc/100);
+    return a+afterDisc;
+  },0);
+}
 function cartTotal(){
+  const itemOff=state.cart.reduce((a,c)=>{
+    const basePrice=c.price*c.qty;
+    const tempDisc=c.tempDiscount||0;
+    return a+Math.round(basePrice*tempDisc/100);
+  },0);
   const sub=cartSubtotal();
   const memOff=state.cartMember?Math.round(sub*(1-state.cartMember.disc)):0;
   const afterMem=sub-memOff;
   const manOff=Math.round(afterMem*(state.cartDiscount||0));
-  return {sub,memOff,manOff,grand:afterMem-manOff};
+  return {sub,itemOff,memOff,manOff,grand:afterMem-manOff};
 }
 
 function renderRegister(){
@@ -1397,7 +1409,9 @@ function renderRegister(){
   if(!state.cart.length){tt.innerHTML='';}
   else{
     const itemOff=state.cart.reduce((a,c)=>a+((c.listPrice||c.price)-c.price)*c.qty,0);
-    let rows=`<div class="tr"><span>小計</span><span>${money(t.sub)}</span></div>`;
+    let rows=`<div class="tr"><span>小計（稅前）</span><span>${money(t.sub+t.itemOff)}</span></div>`;
+    if(t.itemOff)rows+=`<div class="tr"><span class="disc">臨時折扣</span><span class="disc">−${t.itemOff.toLocaleString()}</span></div>`;
+    rows+=`<div class="tr"><span>小計</span><span>${money(t.sub)}</span></div>`;
     if(itemOff>0)rows+=`<div class="tr"><span class="disc">單品折讓</span><span class="disc">已含 −${itemOff.toLocaleString()}</span></div>`;
     if(t.memOff)rows+=`<div class="tr"><span class="disc">會員折扣</span><span class="disc">−${t.memOff.toLocaleString()}</span></div>`;
     if(t.manOff)rows+=`<div class="tr"><span class="disc">折扣 ${Math.round(state.cartDiscount*100)}%</span><span class="disc">−${t.manOff.toLocaleString()}</span></div>`;
@@ -1553,15 +1567,19 @@ function doCheckout(grand){
   const cashIn=+val('co_cash')||0;
   const t=cartTotal();
   const txnNo='S'+Date.now().toString().slice(-6);
-  const items=state.cart.map(c=>({...c}));
+  const items=state.cart.map(c=>({
+    no:c.no,name:c.name,price:c.price,qty:c.qty,cost:c.cost,
+    tempDiscount:c.tempDiscount||0,discountReason:c.discountReason||''
+  }));
   state.cart.forEach(c=>{const s=findStyle(c.no);if(s)s.qty-=c.qty;
-    state.sales.push({date:today(),sku:c.no,qty:c.qty,amt:c.price*c.qty,cost:c.cost*c.qty});});
+    const finalPrice=c.price*(1-(c.tempDiscount||0)/100);
+    state.sales.push({date:today(),sku:c.no,qty:c.qty,amt:finalPrice*c.qty,cost:c.cost*c.qty,discount:c.tempDiscount||0});});
   if(state.cartMember)state.cartMember.spent+=grand;
   state.txns=state.txns||[];
-  state.txns.unshift({no:txnNo,time:nowHM(),items,total:grand,pay,member:state.cartMember?state.cartMember.name:null,memberPhone:state.cartMember?state.cartMember.phone:null});
+  state.txns.unshift({no:txnNo,date:today(),time:nowHM(),items,total:grand,pay,member:state.cartMember?state.cartMember.name:null,memberPhone:state.cartMember?state.cartMember.phone:null,discount:t.itemOff});
   const mem=state.cartMember;
   api('frcs_checkout',S({p_txn:{no:txnNo,date:today(),time:nowHM(),total:grand,pay,
-    member:mem?mem.name:'',memberPhone:mem?mem.phone:'',items:items.map(c=>({no:c.no,name:c.name,price:c.price,qty:c.qty}))}})).then(r=>{
+    member:mem?mem.name:'',memberPhone:mem?mem.phone:'',items:items.map(c=>({no:c.no,name:c.name,price:c.price,qty:c.qty,tempDiscount:c.tempDiscount||0,discountReason:c.discountReason||''}))}})).then(r=>{
       if(r && r.queued) toast('已離線記錄,待網路恢復後上傳');
     });
 
