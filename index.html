@@ -1967,10 +1967,9 @@ function styleForm(g){
     <label class="fld">性別線</label>${styleChips('gender',state.genders,styleSel.gender)}
     <label class="fld">品類</label>${styleChips('cat',state.cats,styleSel.cat)}
 
-    <div class="grid3">
+    <div class="grid2">
       ${canSeeCost()?`<div><label class="fld">進價 NT$ <span class="opt">· 每件</span></label><input class="f" id="st_cost" type="number" inputmode="numeric" value="${isNew?'':g.cost}" oninput="styleMargin()"></div>`:''}
       <div><label class="fld">售價 NT$${priceLocked?' <span class="opt">· 改價限老闆</span>':''}</label><input class="f" id="st_price" type="number" inputmode="numeric" value="${isNew?'':g.price}" oninput="styleMargin()" ${priceLocked?'disabled':''}></div>
-      <div><label class="fld">預設折扣 % <span class="opt">· 選填</span></label><input class="f" id="st_discount" type="number" inputmode="numeric" min="0" max="100" step="0.5" value="${isNew?'':g.discount||''}" placeholder="0"></div>
     </div>
     <div class="margin-line" id="st_margin"></div>
 
@@ -2037,7 +2036,6 @@ async function saveStyle(){
   const pStyle={styleNo, name, cat:styleSel.cat, gender:styleSel.gender, low:+val('st_low')||1, vendor:val('st_vendor'), note:val('st_note')};
   if(!priceEl.disabled) pStyle.price=price;
   if(canSeeCost() && document.getElementById('st_cost')) pStyle.cost=+val('st_cost')||0;
-  pStyle.discount=+(val('st_discount')||0);
   if(pendingPhoto){
     try{ pStyle.photo=await uploadPhoto(styleNo,pendingPhoto); }
     catch(e){ toast('圖片上傳失敗:'+errMsg(e)+',先存文字資料'); }
@@ -2049,7 +2047,6 @@ async function saveStyle(){
   const oldPhoto=g?g.photo:'';
   const base={name,cat:styleSel.cat,gender:styleSel.gender,low:pStyle.low,note:pStyle.note,vendor:pStyle.vendor,
     price:('price' in pStyle)?pStyle.price:(g?g.price:0), cost:('cost' in pStyle)?pStyle.cost:(g?g.cost:0),
-    discount:pStyle.discount,
     photo:('photo' in pStyle)?pStyle.photo:oldPhoto, active:true};
   const keep=new Set(pSkus.map(x=>x.no));
   state.styles.forEach(s=>{ if((s.styleNo||s.no)===styleNo && !keep.has(s.no)) s.active=false; });
