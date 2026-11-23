@@ -1376,16 +1376,18 @@ function renderRegister(){
   else{
     cl.innerHTML=state.cart.map(c=>{
       const off=c.listPrice&&c.price<c.listPrice;
+      const tempDisc=c.tempDiscount||0;
+      const finalPrice=c.price*(1-tempDisc/100);
       return `<div class="cartrow">
       ${thumbHtml(findStyle(c.no)||{},'sm')}
       <div class="ci"><div class="cn">${c.name}</div>
-        <div class="cv" onclick="openItemPrice('${c.no}')" style="cursor:pointer">${c.no} · ${off?`<s>${money(c.listPrice)}</s> <span style="color:var(--red)">${money(c.price)}</span>`:money(c.price)} ✎</div></div>
+        <div class="cv">${c.no} · ${off?`<s>${money(c.listPrice)}</s> <span style="color:var(--red)">${money(c.price)}</span>`:money(c.price)}${tempDisc?` <span style="color:var(--red)">-${tempDisc}%</span>`:''} <button class="btn ghost sm" style="width:auto;margin:0;padding:2px 6px;font-size:11px" onclick="openCartItemDiscount('${c.no}')">折扣${tempDisc?'✎':''}</button></div></div>
       <div class="qstep">
         <button onclick="cartQtyStep('${c.no}',-1)">−</button>
         <span class="qn">${c.qty}</span>
         <button onclick="cartQtyStep('${c.no}',1)">＋</button>
       </div>
-      <div class="cp">${(c.price*c.qty).toLocaleString()}</div>
+      <div class="cp">${(finalPrice*c.qty).toLocaleString()}</div>
       <button class="del" onclick="cartDel('${c.no}')">✕</button>
     </div>`;}).join('');
   }
@@ -1524,6 +1526,25 @@ function coChange(grand){
   if(cash<=0){el.textContent='';return;}
   const ch=cash-grand;el.textContent=ch>=0?('找零 NT$'+ch.toLocaleString()):('不足 NT$'+(-ch).toLocaleString());
   el.style.color=ch>=0?'var(--green)':'var(--red)';
+}
+function openCartItemDiscount(no){
+  const c=state.cart.find(x=>x.no===no); if(!c)return;
+  const sku=findStyle(c.no);
+  const baseDis=sku?.discount||0;
+  const tempDis=c.tempDiscount||0;
+  openModal(`<button class="xclose" onclick="closeModal()">✕</button>
+    <h3>調整折扣</h3><div class="sub">${c.name} · ${c.no}</div>
+    <div class="hint">預設折扣 ${baseDis}% · 目前臨時折扣 ${tempDis}%</div>
+    <label class="fld">臨時折扣 %</label><input class="f" id="cid_disc" type="number" inputmode="numeric" min="0" max="100" value="${tempDis}" placeholder="0">
+    <label class="fld">原因(選填)</label><input class="f" id="cid_reason" placeholder="客人要求 / 銷售折扣 …">
+    <button class="btn" style="margin-top:14px" onclick="setCartItemDiscount('${no}')">確認</button>`);
+}
+function setCartItemDiscount(no){
+  const c=state.cart.find(x=>x.no===no); if(!c)return;
+  const disc=+(val('cid_disc')||0);
+  c.tempDiscount=Math.max(0,Math.min(100,disc));
+  c.discountReason=val('cid_reason');
+  closeModal(); renderRegister(); toast(`已調整 ${c.name} 折扣`);
 }
 function doCheckout(grand){
   const pay=state.picks.copay||'現金';
